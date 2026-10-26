@@ -6,4 +6,4 @@ app = FastAPI()
 def home():
     return {
         "message": "Hackathon API is running!"
-    }python -m uvicorn app.main:app --reload
+    }
