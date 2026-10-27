@@ -17,8 +17,7 @@ class AnalyzeResponse(BaseModel):
 
     status: Status
     # 값 목록은 DecisionResult와 같아야 한다 (tests/test_schemas.py에서 확인)
-    # TODO: SPEC 2.10의 prevention/verification은 decision.py SAFE 조건 수정 때 함께 반영
     risk_level: Literal["high", "low", "unknown"]
     reasons: list[str] = []
     matched_cases: int = 0
-    guide_type: Literal["damage_stage", "verify_first", "none"]
+    guide_type: Literal["damage_stage", "prevention", "verification"]

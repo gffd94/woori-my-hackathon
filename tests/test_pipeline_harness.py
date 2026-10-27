@@ -92,34 +92,38 @@ def run_pipeline(db, message, llm_call):
         cases = search_similar_cases(db, VECTOR)
     except (SQLAlchemyError, ValueError):
         # DB 장애를 빈 검색 결과로 오인하지 않고 UNKNOWN으로 처리한다.
-        return decide(matches, None)
+        return decide(matches, None, extracted=extracted, message=message)
     judgement = judge(message, cases, llm_call,
                       entity_lookup=build_entity_lookup(extracted, matches))
-    return decide(matches, judgement, matched_cases=len(cases))
+    return decide(matches, judgement, matched_cases=len(cases), extracted=extracted, message=message)
 
 
-@pytest.mark.parametrize('message,high_risk,signals,expected', [
+# signals는 (신호, 문자 안의 근거 문구) 쌍이다. SPEC 2.10에 따라 RISK는 high(위험)·low(주의)로 나뉘고,
+# 미확인 링크만 있어도 RISK/low다.
+@pytest.mark.parametrize('message,suspicious,signals,expected,level', [
     ('가상은행 계좌 정지 https://new.example 인증 요청', True,
-     ['기관 사칭', '인증 요구'], Status.RISK),
-    ('가상은행 결제 안내 https://official.example', False, [], Status.SAFE),
+     [('기관 사칭', '가상은행 계좌 정지'), ('인증 요구', '인증 요청')], Status.RISK, 'high'),
+    ('가상은행 결제 안내 https://official.example', False, [], Status.SAFE, 'low'),
     ('특별 지원금 문의010-0000-0000입니다', False,
-     ['개인 번호로 연락 유도'], Status.UNKNOWN),
+     [('개인 번호로 연락 유도', '010-0000-0000')], Status.RISK, 'high'),
     ('DB 미등록 기관 사칭 https://unseen.example 앱 설치 요구', True,
-     ['기관 사칭', '앱 설치 유도'], Status.RISK),
+     [('기관 사칭', '기관 사칭'), ('앱 설치 유도', '앱 설치 요구')], Status.RISK, 'high'),
     ('공식 주소와 인증 요구 https://official.example', True,
-     ['기관 사칭', '인증 요구'], Status.RISK),
-    ('https://official.example.evil.test 결제 안내', False, [], Status.UNKNOWN),
+     [('기관 사칭', '공식 주소'), ('인증 요구', '인증 요구')], Status.RISK, 'high'),
+    ('https://official.example.evil.test 결제 안내', False, [], Status.RISK, 'low'),
 ])
-def test_design_scenarios(harness_db, message, high_risk, signals, expected):
+def test_design_scenarios(harness_db, message, suspicious, signals, expected, level):
     prompts = []
 
     def fake_llm(system, user):
         prompts.append(user)
-        return json.dumps(dict(is_high_risk=high_risk, signals=signals,
+        return json.dumps(dict(suspicious=suspicious,
+                               signals=[dict(signal=s, evidence=e) for s, e in signals],
                                reasons=['테스트 근거'], category=None))
 
     result = run_pipeline(harness_db, message, fake_llm)
     assert result.status == expected
+    assert result.risk_level == level
     assert result.matched_cases == 2
     assert result.register_as_pending == (expected == Status.RISK)
     assert '가상기관 인증 요구 사례' in prompts[0]
