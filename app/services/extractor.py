@@ -6,6 +6,19 @@ from urllib.parse import urlsplit, urlunsplit
 
 
 URL_PATTERN = re.compile(r"(?:https?://|www\.)[^\s<>\"']+", re.IGNORECASE)
+# 스킴 없이 적힌 주소(SPEC 2.6). 일반 문장의 마침표를 도메인으로 오인하지 않도록
+# 허용한 최상위 도메인으로 끝나는 형태만 인정한다. example·test는 문서·테스트용 예약 도메인이다.
+BARE_TLDS = (
+    "com", "net", "org", "kr", "co", "me", "ly", "io", "xyz", "top", "shop", "site", "info", "biz",
+    "cc", "link", "app", "dev", "ai", "online", "store", "club", "vip", "pw", "tk", "gl", "gd", "to",
+    "example", "test",
+)
+BARE_URL_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_@.\-/])"  # 이메일·다른 주소의 일부가 아니어야 한다. 한글과는 붙어 있어도 된다.
+    r"(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+(?:" + "|".join(BARE_TLDS) + r")"
+    r"(?![a-z0-9\-])(?:/[^\s<>\"']*)?",
+    re.IGNORECASE,
+)
 PHONE_PATTERN = re.compile(
     r"(?<![A-Za-z0-9_])(?:01[016789][ -]?\d{3,4}[ -]?\d{4}"
     r"|0(?:2|[3-6]\d|70)[ -]?\d{3,4}[ -]?\d{4}"
@@ -67,33 +80,41 @@ def normalize_phone(value: str) -> str:
     return re.sub(r"\D", "", value)
 
 
+def _trim_url(raw: str) -> str:
+    # 쿼리가 있으면 끝 구두점도 값일 수 있으므로 임의로 지우지 않는다.
+    punctuation = '.,!?;:，。' if '?' not in raw and '#' not in raw else ''
+    raw = raw.rstrip(punctuation) if punctuation else raw
+    # 문장을 감싼 괄호만 제거하고 URL 내부의 짝이 맞는 괄호는 보존한다.
+    while raw and raw[-1] in ')]}':
+        closing = raw[-1]
+        opening = {')': '(', ']': '[', '}': '{'}[closing]
+        if raw.count(closing) <= raw.count(opening):
+            break
+        raw = raw[:-1]
+        if punctuation:
+            raw = raw.rstrip(punctuation)
+    return raw
+
+
 def extract_entities(message: str, organization_names: list[str] | None = None) -> ExtractedEntities:
     """기관명은 팀에서 관리하는 목록을 전달받아 단순 문자열로 추출한다.
 
-    URL은 http(s):// 또는 www.로 시작하는 주소를 지원한다.
+    URL은 http(s)://, www.로 시작하는 주소와 허용한 최상위 도메인으로 끝나는 스킴 없는 주소를 지원한다.
     도메인만 소문자로 통일하고 경로·쿼리의 대소문자는 보존한다.
     unparsed_urls에는 파싱 실패 또는 일반 DB 비교를 보류할 URL이 들어간다.
     URL 원문에 개인정보가 있을 수 있으므로 결과를 그대로 로그·화면에 출력하지 않는다.
     """
     result = ExtractedEntities()
-    for match in URL_PATTERN.finditer(message):
-        raw = match.group()
-        # 쿼리가 있으면 끝 구두점도 값일 수 있으므로 임의로 지우지 않는다.
-        punctuation = '.,!?;:，。' if '?' not in raw and '#' not in raw else ''
-        raw = raw.rstrip(punctuation) if punctuation else raw
-        # 문장을 감싼 괄호만 제거하고 URL 내부의 짝이 맞는 괄호는 보존한다.
-        while raw and raw[-1] in ')]}':
-            closing = raw[-1]
-            opening = {')': '(', ']': '[', '}': '{'}[closing]
-            if raw.count(closing) <= raw.count(opening):
-                break
-            raw = raw[:-1]
-            if punctuation:
-                raw = raw.rstrip(punctuation)
+    # 스킴 있는 주소를 먼저 지운 뒤 스킴 없는 주소를 찾아, 같은 주소를 두 번 읽지 않는다.
+    without_schemed = URL_PATTERN.sub(' ', message)
+    raws = [_trim_url(m.group()) for m in URL_PATTERN.finditer(message)]
+    raws += [_trim_url(m.group()) for m in BARE_URL_PATTERN.finditer(without_schemed)]
+    for raw in raws:
+        # www.와 스킴 없는 주소는 https://로 해석한다. 확인이 필요한 목록에는 원문을 남긴다.
+        candidate = raw if raw.lower().startswith(('http://', 'https://')) else 'https://' + raw
         try:
-            candidate = 'https://' + raw if raw.lower().startswith('www.') else raw
             has_userinfo = '@' in urlsplit(candidate).netloc
-            url = normalize_url(raw)
+            url = normalize_url(candidate)
             host = urlsplit(url).hostname
         except (ValueError, UnicodeError):
             result.unparsed_urls.append(raw)
@@ -109,7 +130,7 @@ def extract_entities(message: str, organization_names: list[str] | None = None) 
         result.domains.append(host)
 
     # URL 경로 안의 숫자를 전화번호로 잘못 뽑지 않는다.
-    without_urls = URL_PATTERN.sub(' ', message)
+    without_urls = BARE_URL_PATTERN.sub(' ', without_schemed)
     result.phones = [normalize_phone(m.group()) for m in PHONE_PATTERN.finditer(without_urls)]
     result.organizations = [name for name in (organization_names or []) if name and name in message]
     result.urls = list(dict.fromkeys(result.urls))

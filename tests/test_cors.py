@@ -133,6 +133,45 @@ def client(cors_app):
         yield test_client
 
 
+@pytest.fixture
+def analyze_callbacks(cors_app, monkeypatch):
+    from app.routers.analyze import get_analyzer
+    from app.services.analyzer import Analyzer, LookupResult, SearchOutcome
+    from app.services.llm_judge import LLMJudgement
+
+    state = {"fail_save": False, "calls": [], "save_attempts": [], "saved": []}
+
+    def lookup(extracted):
+        state["calls"].append("lookup")
+        return LookupResult()
+
+    def embed(masked):
+        state["calls"].append("embed")
+        return [0.01] * 1536
+
+    def search(masked, vector):
+        state["calls"].append("search")
+        return SearchOutcome(status="completed", method="hybrid", coverage="complete")
+
+    def judge(masked, cards, labels):
+        state["calls"].append("judge")
+        return LLMJudgement(suspicious=False, signals=[], reasons=[], suggestion="SAFE")
+
+    def save(record):
+        state["calls"].append("save")
+        state["save_attempts"].append(record)
+        if state["fail_save"]:
+            raise RuntimeError("TEST_ANALYZE_SAVE_SECRET")
+        state["saved"].append(record)
+
+    analyzer = Analyzer(lookup=lookup, embed=embed, search=search, judge=judge, save=save)
+    previous_overrides = dict(cors_app.dependency_overrides)
+    with monkeypatch.context() as override:
+        override.setitem(cors_app.dependency_overrides, get_analyzer, lambda: analyzer)
+        yield state
+    assert cors_app.dependency_overrides == previous_overrides
+
+
 def assert_cors_headers(response, origin=ORIGIN):
     assert response.headers["access-control-allow-origin"] == origin
     assert "origin" in {part.strip().lower() for part in response.headers["vary"].split(",")}
@@ -318,8 +357,66 @@ def test_docs_openapi_and_production_route_set_are_preserved(client):
     assert docs.status_code == 200
     assert "/openapi.json" in docs.text
     assert schema.status_code == 200
-    assert set(schema.json()["paths"]) == {"/"}
+    paths = schema.json()["paths"]
+    assert set(paths) == {"/", "/analyze"}
+    assert "post" in paths["/analyze"]
     assert_cors_headers(docs)
     assert_cors_headers(schema)
-    for path in ("/analyze", "/reports", "/admin/cases", "/__test__/request"):
+    analyze = client.get("/analyze", headers={"Origin": ORIGIN})
+    assert analyze.status_code == 405
+    assert analyze.headers["allow"] == "POST"
+    assert_cors_headers(analyze)
+    for path in ("/reports", "/admin/cases", "/__test__/request"):
         assert client.post(path, json={"message": "가상 안내"}).status_code == 404
+
+
+def test_analyze_post_success_has_cors(analyze_callbacks, client, caplog):
+    caplog.set_level(logging.DEBUG)
+    response = client.post(
+        "/analyze",
+        json={"message": "가상 공지 TEST_ANALYZE_BODY_SECRET"},
+        headers={"Origin": ORIGIN},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"status", "risk_level", "reasons", "matched_cases", "guide_type", "retrieval"}
+    assert (body["status"], body["risk_level"], body["guide_type"]) == ("SAFE", "low", "prevention")
+    assert isinstance(body["reasons"], list)
+    assert all(isinstance(reason, str) for reason in body["reasons"])
+    assert body["matched_cases"] == 0
+    assert body["retrieval"] == {
+        "status": "completed", "method": "hybrid", "coverage": "complete", "reason_code": None,
+    }
+    assert len(analyze_callbacks["saved"]) == 1
+    assert set(analyze_callbacks["calls"]) == {"lookup", "embed", "search", "judge", "save"}
+    assert_cors_headers(response)
+    assert "TEST_ANALYZE_BODY_SECRET" not in response.text
+    assert "TEST_ANALYZE_BODY_SECRET" not in caplog.text
+
+
+def test_analyze_post_save_failure_has_cors(analyze_callbacks, client, caplog):
+    caplog.set_level(logging.DEBUG)
+    analyze_callbacks["fail_save"] = True
+    response = client.post(
+        "/analyze",
+        json={"message": "가상 공지 TEST_ANALYZE_BODY_SECRET"},
+        headers={"Origin": ORIGIN},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": {
+            "code": "VERDICT_LOG_UNAVAILABLE",
+            "message": "판정 결과를 기록하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        }
+    }
+    assert len(analyze_callbacks["save_attempts"]) == 1
+    assert analyze_callbacks["saved"] == []
+    assert set(analyze_callbacks["calls"]) == {"lookup", "embed", "search", "judge", "save"}
+    assert_cors_headers(response)
+    for secret in ("TEST_ANALYZE_BODY_SECRET", "TEST_ANALYZE_SAVE_SECRET"):
+        assert secret not in response.text
+        assert secret not in caplog.text
+    assert "RuntimeError" not in response.text
+    assert "VerdictLogError" not in response.text

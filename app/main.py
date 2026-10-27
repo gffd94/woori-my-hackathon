@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import load_frontend_origins
 from app.errors import register_exception_handlers
+from app.routers.analyze import router as analyze_router
 
 app = FastAPI()
 register_exception_handlers(app)
@@ -14,6 +15,7 @@ app.add_middleware(
     allow_headers=["Content-Type"],
     allow_credentials=False,
 )
+app.include_router(analyze_router)
 
 @app.get("/")
 def home():
