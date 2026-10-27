@@ -117,6 +117,16 @@ def decide_final(evidence: Evidence) -> FinalDecision:
     if evidence.incomplete:
         return _final(Status.UNKNOWN, [REASON_INCOMPLETE])
 
+    # 링크가 모두 공식 도메인(official_links)이고 미확인 요소·규칙 일치가 없으면,
+    # 발신 표기만으로 잡히기 쉬운 기관 사칭 신호 하나는 의심 근거로 보지 않는다 (SPEC 2.10.1)
+    if (
+        evidence.official_support
+        and not evidence.unresolved
+        and not evidence.rule_matches
+        and set(signals) == {LONE_WEAK_SIGNAL}
+    ):
+        return _final(Status.SAFE, [REASON_SAFE])
+
     # 3~4. 의심 근거가 하나라도 있으면 RISK, 근거의 세기로 high·low를 나눈다
     suspected = bool(signals) or judgement.suspicious
     reasons = _signal_reasons(signals)

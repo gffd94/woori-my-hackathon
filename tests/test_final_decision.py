@@ -104,9 +104,24 @@ def test_D09_악성_일치는_LLM이_SAFE를_제안해도_RISK():
 
 
 def test_D10_기관_사칭이_다른_근거_없이_혼자면_RISK_low():
-    result = decide_final(replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭"])))
+    # 공식 링크로 뒷받침되지 않는 경우다. 공식 링크만 있으면 D10d처럼 SAFE다.
+    result = decide_final(replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭"]), official_support=False))
 
     assert _level(result)[:2] == (Status.RISK, "low")
+
+
+def test_D10d_링크가_모두_공식이고_기관_사칭_신호만_있으면_SAFE():
+    # 예: "[우리은행] ... https://wooribank.com" 정상 공지에 LLM이 발신 표기로 기관 사칭을 고른 경우
+    result = decide_final(replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭"], "RISK")))
+
+    assert _level(result) == (Status.SAFE, "low", "prevention")
+    assert result.reasons == [REASON_SAFE]
+
+
+def test_D10e_공식_링크가_있어도_기관_사칭_외_신호가_섞이면_SAFE가_아니다():
+    result = decide_final(replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭", "긴급성 압박"])))
+
+    assert result.status == Status.RISK
 
 
 @pytest.mark.parametrize(
