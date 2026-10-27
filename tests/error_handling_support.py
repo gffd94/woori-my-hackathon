@@ -82,7 +82,7 @@ def pytest_configure(config):
             patch.setattr(owner, name, blocked("DB 연결·SQL 실행"))
 
     for name in tuple(os.environ):
-        if name in {"DATABASE_URL", "TEST_DATABASE_URL", "HARNESS_DATABASE_URL", "ADMIN_API_KEY", "REPORT_FINGERPRINT_KEY"} or name.startswith(("LLM_", "EMBEDDING_", "OPENAI_")):
+        if name in {"DATABASE_URL", "TEST_DATABASE_URL", "HARNESS_DATABASE_URL", "ADMIN_API_KEY", "REPORT_FINGERPRINT_KEY", "FRONTEND_ORIGINS"} or name.startswith(("LLM_", "EMBEDDING_", "OPENAI_")):
             patch.delenv(name)
     patch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: False)
 
