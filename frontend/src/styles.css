@@ -220,12 +220,14 @@ ul { padding: 0; list-style: none; }
 .warn__title { font: 700 14.5px/20px var(--font-noto); }
 .warn__text { font: 400 11.5px/16px var(--font-noto); margin-top: 6px; }
 .rcard__section { font: 700 12.5px/17px var(--font-noto); margin: 13px 0 0 17px; }
-.factors { margin: 11px 0 0 11px; display: grid; grid-template-columns: 21px max-content 1fr; column-gap: 9px; row-gap: 14.5px; align-items: center; }
-.factor { display: contents; }
-.factor__mark { width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; }
+/* 신호마다 한 줄: 아이콘 | 제목(+설명). 설명이 없거나 제목이 길어도 줄이 밀리거나 넘치지 않게 한다 */
+.factors { margin: 11px 0 0 11px; display: flex; flex-direction: column; gap: 14.5px; }
+.factor { display: flex; align-items: flex-start; gap: 9px; }
+.factor__text { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 9px; row-gap: 2px; min-width: 0; }
+.factor__mark { width: 21px; height: 21px; border-radius: 50%; display: grid; place-items: center; flex: none; }
 .factor__mark img { width: 13px; height: 13px; object-fit: cover; }
 .factor__mark--text { font: 700 13.5px/1 var(--font-noto); }
-.factor__title { font: 700 14.5px/20px var(--font-noto); color: #26364f; white-space: nowrap; padding-right: 3px; }
+.factor__title { font: 700 14.5px/20px var(--font-noto); color: #26364f; word-break: keep-all; overflow-wrap: anywhere; }
 .factor__detail { font: 400 12px/16px var(--font-noto); color: #67758a; }
 
 .rcard--risk .rcard__title, .rcard--risk .rcard__section { color: var(--risk-strong); }
