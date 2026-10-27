@@ -16,7 +16,7 @@ import os
 import re
 import unicodedata
 import urllib.request
-from typing import Callable
+from typing import Callable, Literal
 
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
@@ -68,9 +68,10 @@ signals의 signal은 아래 목록에 있는 표현 그대로만 고른다. 목�
 - 위험 신호가 전혀 없으면 signals는 빈 배열로 둔다.
 - reasons는 사용자에게 보여줄 짧은 판단 근거 1~3개다 (각 20자 이내).
 - category는 기관 사칭, 택배, 지원금, 결제, 지인 사칭, 기타 중 하나다. 판단할 수 없으면 null이다.
+- suggestion은 RISK, SAFE, UNKNOWN 중 하나다. 최종 판정은 서버가 하므로 suggestion은 참고용이다.
 
 아래 형식의 JSON 객체 하나로만 답한다. JSON 밖의 텍스트는 쓰지 않는다.
-{"suspicious": true, "signals": [{"signal": "기관 사칭", "evidence": "[OO은행] 계좌가 정지"}], "reasons": ["금융기관 사칭"], "category": "기관 사칭"}"""
+{"suspicious": true, "signals": [{"signal": "기관 사칭", "evidence": "[OO은행] 계좌가 정지"}], "reasons": ["금융기관 사칭"], "category": "기관 사칭", "suggestion": "RISK"}"""
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -89,6 +90,8 @@ class LLMJudgement(BaseModel):
     signals: list[Signal] = []
     reasons: list[str] = []
     category: str | None = None
+    # 판정 제안. 참고용이며 최종 판정은 서버 규칙이 정한다.
+    suggestion: Literal["RISK", "SAFE", "UNKNOWN"] | None = None
 
     @field_validator("signals")
     @classmethod

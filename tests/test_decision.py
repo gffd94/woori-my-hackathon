@@ -43,7 +43,7 @@ def test_가상은행_계좌정지_외부링크는_RISK_high():
 
     _assert_risk(result, "high")
     assert result.matched_cases == 3
-    assert "근거" in result.reasons
+    assert "기관 사칭 신호가 확인되었습니다" in result.reasons
 
 
 def test_DB에_없는_신규_기관_사칭은_RISK이고_pending_등록_대상():
@@ -124,7 +124,7 @@ def test_U25_공식_URL과_미확인_URL만_있으면_low():
     result = _decide(message, OFFICIAL_DOMAIN, _judgement(False))
 
     _assert_risk(result, "low")
-    assert any("공식" in reason for reason in result.reasons)
+    assert any("확인되지 않은" in reason for reason in result.reasons)
 
 
 def test_U31_공식_host라도_미확인_전화번호가_있으면_RISK():
