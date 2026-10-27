@@ -12,6 +12,7 @@ DB 대조·검색·임베딩·LLM·기록 저장은 생성자로 받는 함수(�
 
 import ipaddress
 import logging
+import os
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Callable, Literal
@@ -81,10 +82,6 @@ class VerdictRecord:
 
 class VerdictLogError(Exception):
     """판정 기록 저장 실패. 라우터가 503으로 바꾼다."""
-
-
-class NotConnectedError(Exception):
-    """실제 DB 구현이 아직 연결되지 않은 호출 경계."""
 
 
 Lookup = Callable[[ExtractedEntities], LookupResult]
@@ -302,23 +299,33 @@ def _log_failure(stage: str, exc: Exception) -> None:
 
 
 # --- 운영 연결 ---
-# 실제 DB 대조·검색·기록 저장은 ERD 기준 구현 전이라 연결하지 않는다.
-# 가짜 성공을 돌려주지 않고 실패시킨다: 대조 실패 → UNKNOWN, 기록 실패 → 503.
+# DB 연결이 없으면 가짜 성공을 돌려주지 않고 실패시킨다: 대조 실패 → UNKNOWN, 기록 실패 → 503.
 
-def _not_connected(*args, **kwargs):
-    raise NotConnectedError("실제 DB 구현이 아직 연결되지 않았습니다")
+# llm_judge.call_openai의 기본 모델과 같아야 한다
+DEFAULT_LLM_MODEL = "gpt-4o-mini"
 
 
 def _judge_with_llm(masked: str, cards: list[str], labels: dict[str, str | None]) -> LLMJudgement | None:
     return llm_judge(masked, cards, entity_lookup=labels)
 
 
+def _new_session():
+    # DATABASE_URL이 없어도 앱 시작·요청 검증은 되도록 첫 DB 사용 시점에 엔진을 만든다
+    from app.db.session import get_session_factory
+
+    return get_session_factory()()
+
+
 def build_default_analyzer(settings: Settings) -> Analyzer:
+    # repository가 이 모듈의 자료형을 쓰므로 순환 import를 피해 여기서 가져온다
+    from app.services import repository
+
     return Analyzer(
-        lookup=_not_connected,
+        lookup=partial(repository.lookup_indicators, session_factory=_new_session),
         embed=partial(request_embedding, settings=settings),
-        search=_not_connected,
+        search=partial(repository.search_cards, session_factory=_new_session),
         judge=_judge_with_llm,
-        save=_not_connected,
-        model_version=settings.llm_model,
+        save=partial(repository.save_verdict, session_factory=_new_session),
+        # verdict_logs.model_version은 NOT NULL이다. LLM_* 통일 전에는 llm_judge가 쓰는 OPENAI_MODEL을 따른다.
+        model_version=settings.llm_model or os.getenv("OPENAI_MODEL", DEFAULT_LLM_MODEL),
     )
