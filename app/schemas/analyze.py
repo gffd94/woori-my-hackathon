@@ -4,11 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from app.schemas.common import MessageText
+from app.schemas.common import MessageText, StrictRequest
 from app.services.decision import Status
 
 
-class AnalyzeRequest(BaseModel):
+class AnalyzeRequest(StrictRequest):
     message: MessageText
 
 
@@ -17,6 +17,7 @@ class AnalyzeResponse(BaseModel):
 
     status: Status
     # 값 목록은 DecisionResult와 같아야 한다 (tests/test_schemas.py에서 확인)
+    # TODO: SPEC 2.10의 prevention/verification은 decision.py SAFE 조건 수정 때 함께 반영
     risk_level: Literal["high", "low", "unknown"]
     reasons: list[str] = []
     matched_cases: int = 0

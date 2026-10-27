@@ -1,10 +1,10 @@
-"""여러 schema에서 같이 쓰는 입력 규칙"""
+"""여러 schema에서 같이 쓰는 입력 규칙 (SPEC 2.11)"""
 
 from typing import Annotated
 
-from pydantic import BeforeValidator, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
-MAX_MESSAGE_CHARS = 2000
+MAX_MESSAGE_CHARS = 5000
 
 # 판별·신고에 공통으로 쓰는 문자 원문. 앞뒤 공백을 지운 뒤 길이를 검사한다.
 MessageText = Annotated[
@@ -13,12 +13,7 @@ MessageText = Annotated[
 ]
 
 
-def _blank_to_none(v: object) -> object:
-    if isinstance(v, str):
-        return v.strip() or None
-    return v
+class StrictRequest(BaseModel):
+    """요청 body 공통 설정. 정의되지 않은 필드가 오면 422로 거부한다."""
 
-
-# 선택 입력 분류. 빈 문자열은 "입력 안 함"으로 본다.
-# TODO: DB 담당자와 category 목록을 정하면 Enum으로 교체
-Category = Annotated[str | None, BeforeValidator(_blank_to_none)]
+    model_config = ConfigDict(extra="forbid")
