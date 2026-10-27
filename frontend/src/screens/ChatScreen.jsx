@@ -198,8 +198,6 @@ export default function ChatScreen({ onExit, sharedText }) {
     }
   }, [showToast]);
 
-  const onImage = useCallback(() => showToast('이미지 판별(POST /analyze/image)은 2단계 기능이에요.'), [showToast]);
-
   return (
     <div className="screen chat">
       <ChatHeader onBack={onExit} onClose={onExit} />
@@ -242,7 +240,7 @@ export default function ChatScreen({ onExit, sharedText }) {
           }
         })}
       </div>
-      <InputBar value={value} onChange={setValue} onSend={onSend} onPaste={onPaste} onImage={onImage}
+      <InputBar value={value} onChange={setValue} onSend={onSend} onPaste={onPaste}
         placeholder={PLACEHOLDER[mode]} disabled={busy} />
     </div>
   );
