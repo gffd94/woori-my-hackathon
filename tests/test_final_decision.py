@@ -103,8 +103,28 @@ def test_D09_악성_일치는_LLM이_SAFE를_제안해도_RISK():
     assert result.status == Status.RISK
 
 
-def test_D10_강한_신호_하나면_RISK_high():
-    result = decide_final(replace(SAFE_BASE, official_support=False, judgement=_llm(True, ["기관 사칭"])))
+def test_D10_기관_사칭이_다른_근거_없이_혼자면_RISK_low():
+    result = decide_final(replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭"])))
+
+    assert _level(result)[:2] == (Status.RISK, "low")
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"unresolved": True},                                              # 미확인 URL·전화번호
+        {"judgement": _llm(True, ["기관 사칭", "긴급성 압박"])},           # 다른 신호
+        {"rule_matches": ("기관 연락 유도",)},                             # 규칙 일치
+    ],
+)
+def test_D10b_기관_사칭에_다른_근거가_있으면_RISK_high(extra):
+    base = replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭"]))
+
+    assert _level(decide_final(replace(base, **extra)))[:2] == (Status.RISK, "high")
+
+
+def test_D10c_기관_사칭_외_강한_신호는_혼자여도_RISK_high():
+    result = decide_final(replace(SAFE_BASE, judgement=_llm(False, ["인증 요구"])))
 
     assert _level(result)[:2] == (Status.RISK, "high")
 

@@ -26,6 +26,8 @@ from app.services.rule_guard import match_rules
 
 # 신호가 이 개수 이상이면 약한 신호만으로도 RISK/high다
 HIGH_RISK_MIN_SIGNALS = 2
+# 강한 신호지만 다른 근거 없이 혼자 있으면 약한 신호로 세는 신호
+LONE_WEAK_SIGNAL = "기관 사칭"
 
 TYPE_LABELS = {"url": "URL", "phone": "전화번호", "domain": "도메인"}
 
@@ -124,8 +126,11 @@ def decide_final(evidence: Evidence) -> FinalDecision:
     if evidence.unresolved:
         reasons.append(REASON_UNRESOLVED)
     if suspected or evidence.rule_matches or evidence.unresolved:
+        # 기관 사칭은 발신 표기만으로도 잡히기 쉬워 혼자 있으면 약한 신호로 센다 (SPEC 2.10.1).
+        # 다른 신호·규칙·미확인 요소가 함께 있으면 아래 다른 조건으로 high가 된다.
+        strong = [s for s in signals if s in STRONG_SIGNALS and s != LONE_WEAK_SIGNAL]
         high = (
-            any(signal in STRONG_SIGNALS for signal in signals)
+            bool(strong)
             or len(signals) >= HIGH_RISK_MIN_SIGNALS
             or bool(evidence.rule_matches)
             or (evidence.unresolved and suspected)
