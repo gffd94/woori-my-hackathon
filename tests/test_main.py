@@ -33,7 +33,7 @@ def test_docs와_OpenAPI는_DB와_외부_설정_없이_제공된다(client):
     assert docs.status_code == 200
     assert "/openapi.json" in docs.text
     assert schema.status_code == 200
-    assert set(schema.json()["paths"]) == {"/"}
+    assert set(schema.json()["paths"]) == {"/", "/analyze"}
 
 
 def test_등록되지_않은_경로의_기존_404를_보존한다(client):
@@ -52,5 +52,6 @@ def test_허용하지_않은_메서드의_기존_405와_Allow를_보존한다(cl
 
 
 def test_분석과_신고와_관리자_라우트를_이번에_추가하지_않는다(client):
-    for path in ("/analyze", "/reports", "/admin/cases", "/__test__/request"):
+    # /analyze는 feature/analyze-api에서 추가됐다 (SPEC R-04). 신고·관리자 경로만 없어야 한다.
+    for path in ("/reports", "/admin/cases", "/__test__/request"):
         assert client.post(path, json={"message": "가상 안내"}).status_code == 404
