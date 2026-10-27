@@ -114,14 +114,17 @@ def test_GET_루트_응답은_그대로다(client):
 
 # --- 실제 호출 차단 (N) ---
 
-def test_N05_대역_없이_호출해도_실제_DB_외부_호출_없이_503(client, monkeypatch):
+def test_N05_대역_없이_호출해도_실제_DB_외부_호출_없이_503(client, monkeypatch, block_real_calls):
     # 실제 .env를 읽지 않게 한다 (N-04)
     monkeypatch.setattr(config, "load_dotenv", lambda **kwargs: False)
 
     response = client.post("/analyze", json={"message": SAFE_MESSAGE})
 
-    # 실제 대조·저장이 아직 연결되지 않아 기록 저장 단계에서 503이 된다 (가짜 성공 없음)
+    # DB를 쓸 수 없으면 대조 실패 → 검색·LLM 생략 → 기록 저장 실패로 503이 된다 (가짜 성공 없음).
+    # 엔진 생성 시도만 차단 대역에 기록되고, 소켓·HTTP 연결은 시도하지 않는다.
     assert response.status_code == 503
+    assert set(block_real_calls) == {"db_session.get_engine"}
+    block_real_calls.clear()
 
 
 def test_N01_앱_import와_시작만으로는_실제_호출이_없다(block_real_calls):
