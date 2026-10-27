@@ -1,10 +1,10 @@
 """환경 변수로 설정하는 동기 SQLAlchemy 연결.
 
-DATABASE_URL은 프로세스 환경 변수로 전달한다. 이 모듈을 가져오는 것만으로는
-DB에 접속하지 않으며, 테이블 생성이나 vector 확장 설치도 수행하지 않는다.
+DATABASE_URL은 load_settings()로 읽는다. 프로세스 환경 변수가 .env보다 우선한다.
+이 모듈을 가져오는 것만으로는 DB에 접속하지 않으며, 테이블 생성이나 vector 확장
+설치도 수행하지 않는다.
 """
 
-import os
 from collections.abc import Iterator
 from functools import lru_cache
 from typing import Annotated
@@ -15,11 +15,13 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.config import load_settings
+
 
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     """첫 사용 시 엔진을 만들고, 실제 연결은 쿼리 실행까지 미룬다."""
-    database_url = os.getenv("DATABASE_URL", "").strip()
+    database_url = (load_settings().database_url or "").strip()
     if not database_url:
         raise RuntimeError("DATABASE_URL 환경 변수를 설정해야 합니다.")
     try:

@@ -5,6 +5,33 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 
+import app.config as config
+
+_real_load_dotenv = config.load_dotenv
+
+
+def _use_dotenv(monkeypatch, dotenv_file):
+    # load_dotenv()는 작업 위치가 아니라 config.py 위치부터 .env를 찾으므로 경로를 직접 지정한다
+    monkeypatch.setattr(
+        config,
+        "load_dotenv",
+        lambda override: _real_load_dotenv(dotenv_path=dotenv_file, override=override),
+    )
+
+
+def _unset_env(monkeypatch, name):
+    # load_dotenv가 os.environ에 써 넣은 값도 테스트 후 원래대로 되돌리도록 기록해 둔다
+    monkeypatch.setenv(name, "")
+    monkeypatch.delenv(name)
+
+
+@pytest.fixture(autouse=True)
+def isolate_dotenv(tmp_path, monkeypatch):
+    """프로젝트의 실제 .env 대신 빈 임시 .env를 읽게 한다."""
+    empty = tmp_path / "empty.env"
+    empty.write_text("", encoding="utf-8")
+    _use_dotenv(monkeypatch, empty)
+
 
 @pytest.mark.parametrize(
     "database_url",
@@ -70,7 +97,7 @@ def test_DB설정이_없거나_지원하지_않는_주소면_접속전에_명확
     from app.db.session import get_engine
 
     if database_url is None:
-        monkeypatch.delenv("DATABASE_URL", raising=False)
+        _unset_env(monkeypatch, "DATABASE_URL")
     else:
         monkeypatch.setenv("DATABASE_URL", database_url)
     get_engine.cache_clear()
@@ -78,4 +105,37 @@ def test_DB설정이_없거나_지원하지_않는_주소면_접속전에_명확
         with pytest.raises(RuntimeError, match="DATABASE_URL"):
             get_engine()
     finally:
+        get_engine.cache_clear()
+
+
+def test_DATABASE_URL이_env파일에만_있으면_그_주소로_엔진을_만든다(tmp_path, monkeypatch):
+    from app.db.session import get_engine
+
+    dotenv_file = tmp_path / ".env"
+    dotenv_file.write_text("DATABASE_URL=postgresql+psycopg://localhost/dotenv_only\n", encoding="utf-8")
+    _use_dotenv(monkeypatch, dotenv_file)
+    _unset_env(monkeypatch, "DATABASE_URL")
+    get_engine.cache_clear()
+    engine = get_engine()
+    try:
+        assert engine.url.database == "dotenv_only"
+        assert engine.pool.checkedout() == 0
+    finally:
+        engine.dispose()
+        get_engine.cache_clear()
+
+
+def test_환경변수와_env파일에_모두_있으면_환경변수가_우선한다(tmp_path, monkeypatch):
+    from app.db.session import get_engine
+
+    dotenv_file = tmp_path / ".env"
+    dotenv_file.write_text("DATABASE_URL=postgresql+psycopg://localhost/from_dotenv\n", encoding="utf-8")
+    _use_dotenv(monkeypatch, dotenv_file)
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://localhost/from_environment")
+    get_engine.cache_clear()
+    engine = get_engine()
+    try:
+        assert engine.url.database == "from_environment"
+    finally:
+        engine.dispose()
         get_engine.cache_clear()
