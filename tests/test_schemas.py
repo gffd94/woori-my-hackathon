@@ -5,13 +5,21 @@ from typing import get_args
 import pytest
 from pydantic import ValidationError
 
+from app.domain.enums import CaseStatus, Category
 from app.schemas.analyze import AnalyzeRequest, AnalyzeResponse
-from app.schemas.case import CaseOut, CaseStatusUpdate, CaseUpdateResult
+from app.schemas.case import CaseListResponse, CaseOut, CaseStatusUpdate, CaseUpdateResult
 from app.schemas.report import ReportRequest, ReportResponse
 from app.services.decision import DecisionResult, Status
 
 
-# --- 판별 요청 ---
+# --- 공통 Enum (SPEC 2.5.2, 2.11) ---
+
+def test_사례_상태와_카테고리_값은_SPEC과_같다():
+    assert [s.value for s in CaseStatus] == ["pending", "verified", "rejected"]
+    assert [c.value for c in Category] == ["finance", "delivery", "public_agency", "job", "other"]
+
+
+# --- 판별 요청 (SPEC 2.11: 공백만 금지, 최대 5,000자, 추가 필드 거부) ---
 
 def test_판별_요청은_앞뒤_공백을_제거한다():
     request = AnalyzeRequest(message="  [가상은행] 계좌가 정지되었습니다  ")
@@ -19,14 +27,19 @@ def test_판별_요청은_앞뒤_공백을_제거한다():
     assert request.message == "[가상은행] 계좌가 정지되었습니다"
 
 
-@pytest.mark.parametrize("message", ["", "   ", "a" * 2001])
-def test_판별_요청은_빈_문자와_2000자_초과를_거부한다(message):
+@pytest.mark.parametrize("message", ["", "   ", "a" * 5001])
+def test_판별_요청은_빈_문자와_5000자_초과를_거부한다(message):
     with pytest.raises(ValidationError):
         AnalyzeRequest(message=message)
 
 
-def test_판별_요청은_2000자까지_받는다():
-    assert len(AnalyzeRequest(message="a" * 2000).message) == 2000
+def test_판별_요청은_5000자까지_받는다():
+    assert len(AnalyzeRequest(message="a" * 5000).message) == 5000
+
+
+def test_판별_요청은_정의되지_않은_필드를_거부한다():
+    with pytest.raises(ValidationError):
+        AnalyzeRequest(message="문자", category="finance")
 
 
 # --- 판별 응답 ---
@@ -61,54 +74,74 @@ def test_판별_응답의_값_목록은_DecisionResult와_같다(field):
     assert set(response_values) == set(decision_values)
 
 
-# --- 신고 ---
+# --- 신고 (SPEC 1.4, 2.11) ---
 
-def test_신고_요청은_분류를_생략할_수_있다():
-    request = ReportRequest(message="택배 주소 확인 http://fake.example")
-
-    assert request.category is None
+def test_신고_요청은_카테고리를_생략하면_other다():
+    assert ReportRequest(message="택배 주소 확인 http://fake.example").category == Category.OTHER
 
 
-def test_신고_요청의_빈_분류는_None으로_본다():
-    assert ReportRequest(message="문자", category="  ").category is None
+@pytest.mark.parametrize("category", ["finance", "delivery", "public_agency", "job", "other"])
+def test_신고_요청은_SPEC_카테고리를_받는다(category):
+    assert ReportRequest(message="문자", category=category).category.value == category
 
 
-def test_신고_요청도_빈_문자를_거부한다():
+@pytest.mark.parametrize("category", ["택배", "FINANCE", "", "  ", None])
+def test_신고_요청은_그_외_카테고리를_거부한다(category):
+    with pytest.raises(ValidationError):
+        ReportRequest(message="문자", category=category)
+
+
+def test_신고_요청도_빈_문자와_추가_필드를_거부한다():
     with pytest.raises(ValidationError):
         ReportRequest(message="   ")
+    with pytest.raises(ValidationError):
+        ReportRequest(message="문자", status="verified")
 
 
-def test_신고_응답():
-    response = ReportResponse(case_id=1, status="pending", report_count=2, is_new=False)
+def test_신고_응답은_id_status_report_count다():
+    response = ReportResponse(id=1, status="pending", report_count=2)
 
-    assert response.model_dump() == {"case_id": 1, "status": "pending", "report_count": 2, "is_new": False}
+    assert response.model_dump(mode="json") == {"id": 1, "status": "pending", "report_count": 2}
 
 
-# --- 관리자 ---
+@pytest.mark.parametrize("fields", [{"id": 0}, {"report_count": 0}, {"status": "deleted"}])
+def test_신고_응답은_양수_id와_1이상_신고수와_정해진_상태만_허용한다(fields):
+    with pytest.raises(ValidationError):
+        ReportResponse(**({"id": 1, "status": "pending", "report_count": 1} | fields))
+
+
+# --- 관리자 변경 (SPEC 1.5.3: status + expected_version만) ---
 
 @pytest.mark.parametrize("status", ["verified", "rejected"])
 def test_관리자_처리는_verified와_rejected만_받는다(status):
-    assert CaseStatusUpdate(status=status).status == status
+    assert CaseStatusUpdate(status=status, expected_version=1).status == status
 
 
 @pytest.mark.parametrize("status", ["pending", "VERIFIED", "deleted"])
 def test_관리자_처리는_그_외_상태를_거부한다(status):
     with pytest.raises(ValidationError):
-        CaseStatusUpdate(status=status)
+        CaseStatusUpdate(status=status, expected_version=1)
 
 
-def test_관리자_처리의_빈_분류는_None으로_본다():
-    # 빈 문자열로 기존 분류를 덮어쓰지 않도록
-    assert CaseStatusUpdate(status="verified", category="  ").category is None
-    assert CaseStatusUpdate(status="verified", category=" 택배 ").category == "택배"
+@pytest.mark.parametrize("body", [{}, {"expected_version": 0}, {"expected_version": -1}, {"expected_version": "abc"}])
+def test_관리자_처리는_양의_정수_expected_version이_필수다(body):
+    with pytest.raises(ValidationError):
+        CaseStatusUpdate(status="verified", **body)
 
+
+def test_관리자_처리는_category_같은_추가_필드를_거부한다():
+    with pytest.raises(ValidationError):
+        CaseStatusUpdate(status="verified", expected_version=1, category="finance")
+
+
+# --- 관리자 목록·사례 응답 ---
 
 def _orm_case(**overrides):
     data = dict(
         id=7,
         message_text="[가상은행] ***님 계좌가 정지되었습니다",
         embedding=[0.1] * 1536,
-        category="기관 사칭",
+        category="finance",
         status="pending",
         report_count=4,
         created_at=datetime(2026, 10, 26, 12, 0),
@@ -118,16 +151,25 @@ def _orm_case(**overrides):
 
 
 def test_사례_응답은_ORM_객체에서_만들고_임베딩은_뺀다():
-    body = CaseOut.model_validate(_orm_case()).model_dump()
+    body = CaseOut.model_validate(_orm_case()).model_dump(mode="json")
 
     assert "embedding" not in body
     assert body["id"] == 7
     assert body["status"] == "pending"
+    assert body["category"] == "finance"
     assert body["report_count"] == 4
 
 
-def test_관리자_처리_결과에는_추가된_entities_수가_있다():
+def test_목록_응답은_items_limit_offset으로_감싼다():
+    body = CaseListResponse(
+        items=[CaseOut.model_validate(_orm_case())], limit=20, offset=0
+    ).model_dump(mode="json")
+
+    assert set(body) == {"items", "limit", "offset"}
+    assert [item["id"] for item in body["items"]] == [7]
+
+
+def test_관리자_처리_결과는_사례_응답과_같은_형식이다():
     result = CaseUpdateResult.model_validate(_orm_case(status="verified"))
 
-    assert result.added_entities == 0
-    assert CaseUpdateResult(**result.model_dump() | {"added_entities": 2}).added_entities == 2
+    assert result.status == CaseStatus.VERIFIED
