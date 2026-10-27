@@ -9,7 +9,7 @@ from app.domain.enums import CaseStatus, Category
 from app.schemas.analyze import AnalyzeRequest, AnalyzeResponse
 from app.schemas.case import CaseListResponse, CaseOut, CaseStatusUpdate, CaseUpdateResult
 from app.schemas.report import ReportRequest, ReportResponse
-from app.services.decision import DecisionResult, Status
+from app.services.decision import FinalDecision
 
 
 # --- 공통 Enum (SPEC 2.5.2, 2.11) ---
@@ -44,32 +44,71 @@ def test_판별_요청은_정의되지_않은_필드를_거부한다():
 
 # --- 판별 응답 ---
 
-def test_판별_응답은_DecisionResult에서_만들고_내부용_필드는_뺀다():
-    result = DecisionResult(
-        status=Status.RISK,
-        risk_level="high",
-        reasons=["금융기관 사칭", "비공식 URL 포함"],
-        matched_cases=3,
-        guide_type="damage_stage",
-        register_as_pending=True,
-    )
+COMPLETED_RETRIEVAL = {"status": "completed", "method": "hybrid", "coverage": "complete", "reason_code": None}
 
-    body = AnalyzeResponse.model_validate(result.model_dump()).model_dump(mode="json")
+
+def test_판별_응답은_SPEC_필드만_내보내고_내부용_필드는_뺀다():
+    internal = {
+        "status": "RISK",
+        "risk_level": "high",
+        "reasons": ["신고된 악성 URL이 포함되어 있습니다"],
+        "matched_cases": 3,
+        "guide_type": "damage_stage",
+        "retrieval": COMPLETED_RETRIEVAL,
+        "register_as_pending": True,
+        "score": 0.9,
+        "source": "paste",
+    }
+
+    body = AnalyzeResponse.model_validate(internal).model_dump(mode="json")
 
     assert body == {
         "status": "RISK",
         "risk_level": "high",
-        "reasons": ["금융기관 사칭", "비공식 URL 포함"],
+        "reasons": ["신고된 악성 URL이 포함되어 있습니다"],
         "matched_cases": 3,
         "guide_type": "damage_stage",
+        "retrieval": COMPLETED_RETRIEVAL,
     }
 
 
+def test_검색_미완료면_matched_cases는_null이다():
+    body = AnalyzeResponse(
+        status="UNKNOWN",
+        risk_level="unknown",
+        reasons=[],
+        matched_cases=None,
+        guide_type="verification",
+        retrieval={"status": "failed", "method": None, "coverage": "unknown"},
+    ).model_dump(mode="json")
+
+    assert body["matched_cases"] is None
+    assert body["retrieval"] == {"status": "failed", "method": None, "coverage": "unknown", "reason_code": None}
+
+
+@pytest.mark.parametrize("retrieval", [
+    {"status": "done", "method": "hybrid", "coverage": "complete"},
+    {"status": "completed", "method": "vector", "coverage": "complete"},
+    {"status": "completed", "method": "hybrid", "coverage": "full"},
+])
+def test_검색_상태는_SPEC_값만_허용한다(retrieval):
+    with pytest.raises(ValidationError):
+        AnalyzeResponse(status="UNKNOWN", risk_level="unknown", reasons=[], matched_cases=None,
+                        guide_type="verification", retrieval=retrieval)
+
+
+@pytest.mark.parametrize("guide_type", ["verify_first", "none"])
+def test_예전_안내_유형은_거부한다(guide_type):
+    with pytest.raises(ValidationError):
+        AnalyzeResponse(status="UNKNOWN", risk_level="unknown", reasons=[], matched_cases=None,
+                        guide_type=guide_type, retrieval=COMPLETED_RETRIEVAL)
+
+
 @pytest.mark.parametrize("field", ["risk_level", "guide_type"])
-def test_판별_응답의_값_목록은_DecisionResult와_같다(field):
+def test_판별_응답의_값_목록은_FinalDecision과_같다(field):
     # decision.py에 값이 추가되면 응답 변환에서 오류가 나므로 여기서 먼저 잡는다
     response_values = get_args(AnalyzeResponse.model_fields[field].annotation)
-    decision_values = get_args(DecisionResult.model_fields[field].annotation)
+    decision_values = get_args(FinalDecision.model_fields[field].annotation)
 
     assert set(response_values) == set(decision_values)
 
