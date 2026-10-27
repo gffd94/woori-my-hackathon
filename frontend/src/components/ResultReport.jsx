@@ -89,6 +89,17 @@ function useCopy(result) {
   return { s, c: COPY[s], tone: s.toLowerCase().replace('_', '-') };
 }
 
+// 같은 위험 신호가 여러 번 오면 한 번만 보여 줍니다 (공백·문장부호 차이는 같은 것으로 봄).
+function uniqueReasons(reasons = []) {
+  const seen = new Set();
+  return reasons.filter((r) => {
+    const key = (r.title || '').replace(/[\s.·,!]/g, '');
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // 1단계: 결과 카드 (Figma 결과 화면)
 export function ResultCard({ result }) {
   const { s, c, tone } = useCopy(result);
@@ -118,11 +129,13 @@ export function ResultCard({ result }) {
       </div>
       <p className="rcard__section">{c.section}</p>
       <ul className="factors">
-        {result.reasons.map((r, i) => (
-          <li key={i} className="factor">
+        {uniqueReasons(result.reasons).map((r) => (
+          <li key={r.title} className="factor">
             <FactorMark code={r.code} status={s} />
-            <span className="factor__title">{r.title}</span>
-            {r.detail && <span className="factor__detail">{r.detail}</span>}
+            <span className="factor__text">
+              <span className="factor__title">{r.title}</span>
+              {r.detail && <span className="factor__detail">{r.detail}</span>}
+            </span>
           </li>
         ))}
       </ul>
