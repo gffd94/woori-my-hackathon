@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import dotenv
 import pytest
 
 import app.config as config
@@ -31,6 +32,9 @@ SETTING_NAMES = (
 def clear_settings_environment(monkeypatch):
     for name in SETTING_NAMES:
         monkeypatch.delenv(name, raising=False)
+    # 경로 없는 load_dotenv는 cwd가 아니라 app/ 기준으로 저장소의 실제 .env를 찾는다.
+    # 실제 값이 테스트 결과·실패 메시지에 섞이지 않도록 테스트 중에는 읽지 않는다.
+    monkeypatch.setattr(config, "load_dotenv", lambda override=False: False)
 
 
 def test_environment_variables_take_precedence_over_dotenv(tmp_path, monkeypatch):
@@ -39,11 +43,10 @@ def test_environment_variables_take_precedence_over_dotenv(tmp_path, monkeypatch
         "LLM_MODEL=dotenv-model\nLLM_API_KEY=dotenv-key\n",
         encoding="utf-8",
     )
-    load_dotenv = config.load_dotenv
     monkeypatch.setattr(
         config,
         "load_dotenv",
-        lambda override: load_dotenv(dotenv_path=dotenv_file, override=override),
+        lambda override: dotenv.load_dotenv(dotenv_path=dotenv_file, override=override),
     )
     monkeypatch.setenv("LLM_MODEL", "environment-model")
 
