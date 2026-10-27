@@ -7,7 +7,8 @@ const COPY = {
   RISK: {
     badge: 'RISK · 위험 의심',
     title: '스미싱 위험이 의심돼요',
-    warnTitle: '링크를 누르지 마세요',
+    warnTitle: '요청에 응하기 전에 확인하세요',
+    warnText: '의심스러운 요청이 포함되어 있어요. 발신처를 공식 채널로 직접 확인하고, 송금이나 개인정보 제공은 잠시 멈춰 주세요.',
     section: '주요 위험 신호',
     actTitle: '지금 이렇게 해주세요',
     actions: [
@@ -53,9 +54,8 @@ const COPY = {
     section: '추가로 필요한 정보',
     actTitle: '이 정보를 보내주세요',
     actions: [
-      '앞뒤 내용이 포함된 문자 전체를 보내주세요.',
+      '앞뒤 내용이 포함된 텍스트 전체를 보내주세요.',
       'URL은 누르지 말고 주소 그대로 복사해주세요.',
-      '이미지는 글자가 선명하게 보이도록 올려주세요.',
     ],
     actNote: '정보·데이터 부족은 위험이 낮거나 안전하다는 뜻이 아니에요.',
   },
@@ -64,7 +64,6 @@ const COPY = {
 export const normalizeStatus = (s) => (s === 'UNKNOWN' ? 'NO_DATA' : s in COPY ? s : 'NO_DATA');
 
 const FACE_IMG = { RISK: 'face-risk.png', SAFE: 'face-safe.png', CAUTION: 'face-caution.png', NO_DATA: 'face-nodata.png' };
-const FACTOR_IMG = { url: 'factor-url.png', urgency: 'factor-urgent.png', impersonation: 'factor-imperson.png' };
 
 const Check = ({ size = 10, color }) => (
   <svg width={size} height={size * 0.75} viewBox="0 0 10 7.5" fill="none" aria-hidden="true">
@@ -77,11 +76,17 @@ const Triangle = ({ color }) => (
   </svg>
 );
 
-function FactorMark({ code, status }) {
+const Cross = () => (
+  <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+    <path d="M2 2L10 10M10 2L2 10" stroke="#e62634" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+
+function FactorMark({ status }) {
   if (status === 'SAFE') return <span className="factor__mark"><Check size={9} color="#1e9a52" /></span>;
   if (status === 'CAUTION') return <span className="factor__mark"><Triangle color="#e59800" /></span>;
   if (status === 'NO_DATA') return <span className="factor__mark factor__mark--text">?</span>;
-  return <span className="factor__mark"><img src={fig(FACTOR_IMG[code] || FACTOR_IMG.url)} alt="" /></span>;
+  return <span className="factor__mark"><Cross /></span>;
 }
 
 function useCopy(result) {
@@ -89,11 +94,29 @@ function useCopy(result) {
   return { s, c: COPY[s], tone: s.toLowerCase().replace('_', '-') };
 }
 
-// 같은 위험 신호가 여러 번 오면 한 번만 보여 줍니다 (공백·문장부호 차이는 같은 것으로 봄).
+// 판정 근거는 유지하고, 화면에서는 같은 의미의 신호를 한 번만 보여 줍니다.
 function uniqueReasons(reasons = []) {
   const seen = new Set();
+  const compact = (text) => (text || '').normalize('NFKC').replace(/[\s\p{P}]/gu, '');
+  const groups = [
+    ['지인·가족 사칭 신호가 확인되었습니다', '가족 사칭 의심 표현이 있습니다'],
+    ['송금·결제 요구 신호가 확인되었습니다', '금전·상품권 요청 신호가 확인되었습니다'],
+    ['개인 번호로 연락 유도 신호가 확인되었습니다', '전화 연락 유도 신호가 확인되었습니다'],
+    ['신고된 악성 URL이 포함되어 있습니다', '신고된 악성 도메인이 포함되어 있습니다'],
+  ].map((group) => group.map(compact));
+  // 구체적인 근거가 있으면 포괄적인 의심 안내는 반복하지 않습니다.
+  const generic = compact('의심스러운 표현이 있어 주의가 필요합니다');
+  const hasSpecific = reasons.some((r) => compact(r.title) && compact(r.title) !== generic);
+  // 같은 그룹은 더 구체적인 문구를 우선하며 입력 순서에 영향받지 않습니다.
+  const preferred = groups.map((group) => group.find((key) => reasons.some((r) => compact(r.title) === key)));
   return reasons.filter((r) => {
-    const key = (r.title || '').replace(/[\s.·,!]/g, '');
+    let key = compact(r.title);
+    if (hasSpecific && key === generic) return false;
+    const groupIndex = groups.findIndex((group) => group.includes(key));
+    if (groupIndex !== -1) {
+      if (key !== preferred[groupIndex]) return false;
+      key = `group:${groupIndex}`;
+    }
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -103,11 +126,7 @@ function uniqueReasons(reasons = []) {
 // 1단계: 결과 카드 (Figma 결과 화면)
 export function ResultCard({ result }) {
   const { s, c, tone } = useCopy(result);
-  const warnText = s === 'RISK'
-    ? (result.basis === 'entities' || result.basis === 'safe_browsing'
-      ? '이미 신고된 피싱 사이트 주소예요. 링크는 열지 말고 확인하세요.'
-      : '문자만으로 확정할 수 없어도, 링크는 열지 말고 확인하세요.')
-    : c.warnText;
+  const warnText = c.warnText;
   return (
     <section className={`rcard rcard--${tone}`} aria-label="AI 분석 결과">
       <div className="rcard__head">

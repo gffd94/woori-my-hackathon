@@ -9,7 +9,7 @@ export function Greeting() {
       <Avatar size={38} />
       <div className="bubble bubble--greet">
         <p className="bubble__title">안녕하세요! 저는 위비예요.</p>
-        <p className="bubble__body">확인할 텍스트나 이미지를 보내주세요.<br />링크와 문구의 위험 신호를 살펴볼게요.</p>
+        <p className="bubble__body">확인할 텍스트를 보내주세요.<br />링크와 문구의 위험 신호를 살펴볼게요.</p>
         <p className="bubble__small">개인정보를 자동으로 가린 뒤 분석해요.</p>
       </div>
     </div>
@@ -29,7 +29,7 @@ export function SafetyGuide() {
         <h2>안전하게 확인하려면</h2>
       </div>
       <ul>
-        <li>문자 원문과 URL을 함께 보내주세요.</li>
+        <li>텍스트 원문과 URL을 함께 보내주세요.</li>
         <li>주민번호·계좌번호·인증번호는 자동으로 가려요.</li>
       </ul>
       <p className="guide__note">링크를 열지 않고 문구와 주소부터 확인해요.</p>
@@ -46,7 +46,7 @@ export function ReceivedMessage({ text, time, shared, maskedCount = 0 }) {
   return (
     <div className="received">
       <p className="received__label">
-        {shared ? '공유한 문자' : '받은 문자'} · {time}
+        {shared ? '공유한 텍스트' : '받은 텍스트'} · {time}
         {maskedCount > 0 && <span className="received__masked"> · 개인정보 {maskedCount}건 자동 가림</span>}
       </p>
       {body.map((line, i) => (

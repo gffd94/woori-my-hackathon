@@ -49,8 +49,8 @@ export async function mockAnalyze({ text }) {
   return {
     status: 'NO_DATA', risk_level: 'none', matched_cases: 0, guide_type: 'need_more_info',
     reasons: [
-      { code: 'other', title: '문자 전체', detail: '앞뒤 내용이 포함된 원문을 보내요' },
-      { code: 'other', title: 'URL·이미지', detail: '주소나 선명한 캡처를 보내주세요' },
+      { code: 'other', title: '텍스트 전체', detail: '앞뒤 내용이 포함된 원문을 보내요' },
+      { code: 'other', title: 'URL 주소', detail: '텍스트 속 주소를 누르지 말고 그대로 복사해 보내주세요' },
     ],
   };
 }

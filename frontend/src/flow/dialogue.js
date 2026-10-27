@@ -98,10 +98,10 @@ const NODES = {
 
   // 정보 부족 (Figma woori_result_no_data)
   noDataNext: () => ({
-    msgs: [{ kind: 'bot', text: '지금 정보만으로는 위험 여부를 판단하기 어려워요.\n문자 원문이나 캡처를 보내주시면 다시 확인할게요.' }],
+    msgs: [{ kind: 'bot', text: '지금 정보만으로는 위험 여부를 판단하기 어려워요.\n텍스트 원문을 보내주시면 다시 확인할게요.' }],
     chips: noDataChips(),
   }),
-  neededInfo: () => ({ msgs: [{ kind: 'list', title: '이런 정보가 있으면 정확해져요', items: ['앞뒤 내용이 포함된 문자 원문', '문자 속 URL 주소(누르지 말고 복사)', '글자가 선명한 캡처 이미지'] }], chips: noDataChips().slice(0, 2) }),
+  neededInfo: () => ({ msgs: [{ kind: 'list', title: '이런 정보가 있으면 정확해져요', items: ['앞뒤 내용이 포함된 텍스트 원문', '텍스트 속 URL 주소(누르지 말고 복사)'] }], chips: noDataChips() }),
 
   // 재분석 후에도 판단이 어려울 때
   unknownFinal: () => ({ msgs: [{ kind: 'bot', text: '여전히 판단하기 어려워요. 문자에 나온 기관의 공식 앱이나 대표번호로 직접 확인하는 게 가장 안전해요.' }], chips: [CALL118, REPORT, END[1]] }),
@@ -120,8 +120,8 @@ const NODES = {
   reportFail: () => ({ msgs: [{ kind: 'bot', text: '신고를 접수하지 못했어요. 잠시 후 다시 시도해 주세요.' }], chips: [{ label: '다시 신고하기', go: 'reportSubmit' }, END[1]] }),
 
   // 예외
-  empty: () => ({ msgs: [{ kind: 'bot', text: '문자 내용이 확인되지 않아요. 받은 문자 전체를 붙여넣어 주세요.' }], chips: [{ label: '다시 붙여넣기', go: 'paste' }] }),
-  tooShort: () => ({ msgs: [{ kind: 'bot', text: '문자 내용이 너무 짧아 확인하기 어려워요. 받은 문자 전체를 붙여넣어 주세요.' }], chips: [{ label: '다시 붙여넣기', go: 'paste' }] }),
+  empty: () => ({ msgs: [{ kind: 'bot', text: '텍스트 내용이 확인되지 않아요. 받은 텍스트 전체를 붙여넣어 주세요.' }], chips: [{ label: '다시 붙여넣기', go: 'paste' }] }),
+  tooShort: () => ({ msgs: [{ kind: 'bot', text: '텍스트 내용이 너무 짧아 확인하기 어려워요. 받은 텍스트 전체를 붙여넣어 주세요.' }], chips: [{ label: '다시 붙여넣기', go: 'paste' }] }),
   tooLong: () => ({ msgs: [{ kind: 'bot', text: '내용이 너무 길어요. 의심되는 문자 하나만 보내 주세요.' }], chips: [{ label: '다시 붙여넣기', go: 'paste' }] }),
   question: () => ({ msgs: [{ kind: 'bot', text: '저는 받은 문자가 위험한지 확인해 드려요. 확인할 문자를 보내 주세요.' }], chips: [{ label: '스미싱 예방 수칙', go: 'prevent' }, { label: '문자 확인하기', go: 'paste' }] }),
   error: () => ({ msgs: [{ kind: 'alert', tone: 'neutral', title: '지금은 정확한 분석이 어려워요.', text: '링크는 누르지 말고 잠시 후 다시 시도해 주세요.' }], chips: [{ label: '다시 시도', go: 'retry' }, { label: '대처법 보기', go: 'tips' }] }),
@@ -137,8 +137,7 @@ function cautionChips() {
 }
 function noDataChips() {
   return [
-    { label: '문자 원문 보내기', go: 'addAll' },
-    { label: '캡처 다시 올리기', action: { kind: 'info', toast: '이미지 판별(POST /analyze/image)은 2단계 기능이에요.' } },
+    { label: '텍스트 원문 보내기', go: 'addAll' },
     { label: '필요한 정보 보기', go: 'neededInfo' },
   ];
 }
