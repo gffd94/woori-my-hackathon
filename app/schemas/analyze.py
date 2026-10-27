@@ -10,6 +10,7 @@ from app.services.decision import Status
 
 class AnalyzeRequest(StrictRequest):
     message: MessageText
+    source: Literal["share", "paste"] = "paste"
 
 
 class AnalyzeResponse(BaseModel):
