@@ -4,8 +4,8 @@ const KNOWN_SCAM = ['parcel-check.example'];
 const URL_RE = /(https?:\/\/\S+|www\.\S+|bit\.ly\/\S+)/i;
 
 export async function mockAnalyze({ text }) {
-  // 분석 중 말풍선 4단계(1.4초씩)가 한 바퀴 보이도록 시연용 대기
-  await wait(5000);
+  // 분석 중 말풍선 3단계(1.4초씩)가 한 바퀴 보이도록 시연용 대기
+  await wait(4000);
   if (/\[오류\]/.test(text)) throw new Error('mock error');
   const url = (text.match(URL_RE) || [])[0];
   const r = [];
