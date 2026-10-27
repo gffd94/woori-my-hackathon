@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -12,6 +13,66 @@ from dotenv import load_dotenv
 
 class ConfigurationError(ValueError):
     """설정값이 유효하지 않을 때 발생한다."""
+
+
+def load_frontend_origins() -> tuple[str, ...]:
+    """다른 서비스 설정과 독립적으로 CORS 허용 출처를 로드한다."""
+    load_dotenv(override=False)
+    value = os.getenv("FRONTEND_ORIGINS", "")
+    if not value.strip():
+        return ()
+
+    origins: list[str] = []
+    try:
+        for item in value.split(","):
+            origin = _normalize_frontend_origin(item)
+            if origin not in origins:
+                origins.append(origin)
+    except ValueError:
+        # URL 파서의 예외에도 입력이 포함될 수 있으므로 연쇄 표시하지 않는다.
+        raise ConfigurationError(
+            "FRONTEND_ORIGINS에 올바른 HTTP·HTTPS 출처 목록을 설정해 주세요."
+        ) from None
+    return tuple(origins)
+
+
+def _normalize_frontend_origin(item: str) -> str:
+    if any(ord(char) < 32 or ord(char) == 127 for char in item):
+        raise ValueError
+    origin = item.strip()
+    if not origin or any(char.isspace() for char in origin):
+        raise ValueError
+    if any(char in origin for char in ("*", "@", "\\", "?", "#")):
+        raise ValueError
+
+    parsed = urlsplit(origin)
+    host = parsed.hostname
+    port = parsed.port
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not host
+        or parsed.path
+        or parsed.netloc.endswith(":")
+        or port == 0
+    ):
+        raise ValueError
+
+    if parsed.netloc.startswith("["):
+        if not re.fullmatch(r"\[[0-9a-fA-F:.]+\](?::[0-9]+)?", parsed.netloc):
+            raise ValueError
+        host = f"[{ipaddress.IPv6Address(host).compressed}]"
+    else:
+        host = host.encode("idna").decode("ascii").lower()
+        if re.fullmatch(r"[0-9]+(?:\.[0-9]+){3}", host):
+            ipaddress.IPv4Address(host)
+        if len(host) > 253 or any(
+            not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label)
+            for label in host.rstrip(".").split(".")
+        ):
+            raise ValueError
+    if port is not None and port != {"http": 80, "https": 443}[parsed.scheme]:
+        host = f"{host}:{port}"
+    return f"{parsed.scheme}://{host}"
 
 
 @dataclass(frozen=True)
