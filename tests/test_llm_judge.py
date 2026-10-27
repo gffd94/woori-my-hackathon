@@ -1,6 +1,8 @@
 import json
 
-from app.services.llm_judge import LLMJudgement, judge, parse_judgement
+import pytest
+
+from app.services.llm_judge import SYSTEM_PROMPT, LLMJudgement, judge, parse_judgement
 
 
 def _valid_raw(**overrides):
@@ -20,6 +22,25 @@ def test_정상_JSON은_LLMJudgement로_파싱된다():
     assert isinstance(result, LLMJudgement)
     assert result.is_high_risk is True
     assert result.signals == ["기관 사칭", "비공식 URL"]
+
+
+@pytest.mark.parametrize("suggestion", ["RISK", "SAFE", "UNKNOWN"])
+def test_suggestion은_RISK_SAFE_UNKNOWN을_받는다(suggestion):
+    assert parse_judgement(_valid_raw(suggestion=suggestion)).suggestion == suggestion
+
+
+def test_suggestion이_없으면_SAFE_제안이_아니다():
+    # 기존 형식 응답도 받되 SAFE를 제안한 것으로 보지 않는다 (SPEC 3.4.2)
+    assert parse_judgement(_valid_raw()).suggestion is None
+
+
+@pytest.mark.parametrize("suggestion", ["safe", "안전", 1])
+def test_suggestion이_허용값이_아니면_None(suggestion):
+    assert parse_judgement(_valid_raw(suggestion=suggestion)) is None
+
+
+def test_시스템_프롬프트는_suggestion_형식을_요구한다():
+    assert '"suggestion"' in SYSTEM_PROMPT
 
 
 def test_JSON이_아니면_None():
