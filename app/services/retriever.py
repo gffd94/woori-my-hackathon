@@ -168,12 +168,14 @@ def search_case_details(
 # ── 활성 수법 카드 hybrid 검색 (SPEC 2.7) ─────────────────────────────────
 
 NGRAM_THRESHOLD = 0.35
-VECTOR_THRESHOLD = 0.80
+# 측정(2026-10-27): 짧은 문자와 카드 사이 코사인은 0.3~0.7이라 0.80은 한 건도 통과하지 못했다.
+# 카드는 LLM 참고용이고 판정에 직접 쓰지 않으므로, 스미싱에 맞는 카드가 붙는 쪽으로 정했다 (SPEC 2.7.3)
+VECTOR_THRESHOLD = 0.43
 TOP_K = 5
 RRF_K = 60
 NGRAM_BATCH_SIZE = 500
 SEARCH_BUDGET_SECONDS = 5.0
-# 경계값(정확히 0.35·0.80)이 부동소수 오차로 빠지지 않게 하는 허용치
+# 경계값(정확히 0.35·0.43)이 부동소수 오차로 빠지지 않게 하는 허용치
 _SCORE_EPSILON = 1e-9
 # 마스킹 대체 표기(OOO, ○○, ***, XXX)는 유사도 계산에서 뺀다.
 _MASK_TOKEN = re.compile(r'O{2,}|○{2,}|\*{2,}|X{3,}')

@@ -95,9 +95,9 @@ def test_U09_n_gram은_0_35_이상만_통과한다():
     assert [pid for pid, _ in picked] == [3, 2]
 
 
-def test_U10_벡터는_0_80_이상만_통과한다():
-    assert VECTOR_THRESHOLD == 0.80
-    picked = top_matches([(1, 0.7999), (2, 0.80), (3, 0.81)], VECTOR_THRESHOLD)
+def test_U10_벡터는_0_43_이상만_통과한다():
+    assert VECTOR_THRESHOLD == 0.43
+    picked = top_matches([(1, 0.4299), (2, 0.43), (3, 0.44)], VECTOR_THRESHOLD)
     assert [pid for pid, _ in picked] == [3, 2]
 
 
