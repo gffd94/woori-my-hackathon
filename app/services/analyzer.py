@@ -24,6 +24,7 @@ from app.services.embedding import request_embedding, validate_embedding
 from app.services.extractor import ExtractedEntities, extract_entities
 from app.services.llm_judge import LLMJudgement, judge as llm_judge
 from app.services.masking import mask_text, mask_url
+from app.services.rule_guard import match_rules
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,9 @@ class Analyzer:
             conflict=elements.conflict if elements else False,
             unresolved=elements.unresolved if elements else False,
             official_support=elements.official_support if elements else False,
+            incomplete=elements.incomplete if elements else False,
+            # 규칙 안전장치는 외부로 보내지 않으므로 원문으로 확인한다 (SPEC 2.10.3)
+            rule_matches=tuple(match_rules(message)),
         ))
 
         record = VerdictRecord(
@@ -207,6 +211,7 @@ class _Elements:
     unresolved: bool
     official_support: bool
     indicator_ids: tuple[int, ...]
+    incomplete: bool = False
     labels: dict[str, str | None] = field(default_factory=dict)
 
 
@@ -229,8 +234,10 @@ def _evaluate(extracted: ExtractedEntities, lookup: LookupResult) -> _Elements:
     indicator_ids: list[int] = []
     labels: dict[str, str | None] = {}
     conflict = False
-    # 해석하지 못한 URL·사용자정보 URL은 평가를 끝낼 수 없다
-    unresolved = bool(extracted.unparsed_urls)
+    # 해석하지 못한 URL·사용자정보 URL은 평가를 끝낼 수 없다 (불완전 추출 → UNKNOWN)
+    incomplete = bool(extracted.unparsed_urls)
+    # 공식 정보로 확인되지 않은 URL·전화번호 (→ RISK 근거)
+    unresolved = False
     official_urls = 0
 
     for url in extracted.urls:
@@ -274,6 +281,7 @@ def _evaluate(extracted: ExtractedEntities, lookup: LookupResult) -> _Elements:
         official_support=bool(extracted.urls) and official_urls == len(extracted.urls),
         indicator_ids=tuple(dict.fromkeys(indicator_ids)),
         labels=labels,
+        incomplete=incomplete,
     )
 
 

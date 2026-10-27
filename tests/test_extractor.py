@@ -32,3 +32,61 @@ def test_empty_and_long_numbers():
 
 def test_disguised_domain_is_preserved():
     assert extract('https://bank.example.evil.test').domains == ['bank.example.evil.test']
+
+
+def test_U38_스킴_없는_도메인도_추출한다():
+    result = extract('자세한 내용은 official.example에서 확인하세요')
+    assert result.urls == ['https://official.example']
+    assert result.domains == ['official.example']
+
+
+def test_스킴_없는_주소의_경로를_보존하고_경로의_숫자는_전화번호가_아니다():
+    result = extract('bit.ly/Ab01000000000 클릭')
+    assert result.urls == ['https://bit.ly/Ab01000000000']
+    assert result.domains == ['bit.ly']
+    assert result.phones == []
+
+
+def test_스킴_없는_국내_도메인():
+    assert extract('notice.co.kr 참고').domains == ['notice.co.kr']
+
+
+def test_이메일_마침표_숫자는_도메인으로_뽑지_않는다():
+    result = extract('help@bank.example 로 문의. 확인했습니다.감사합니다 버전 3.14')
+    assert result.urls == []
+    assert result.domains == []
+
+
+def test_스킴_있는_주소와_같은_주소는_한_번만_뽑는다():
+    result = extract('https://notice.example 또는 notice.example')
+    assert result.urls == ['https://notice.example']
+    assert result.domains == ['notice.example']
+
+
+def test_U38_스킴_없는_도메인도_추출한다():
+    result = extract('자세한 내용은 official.example에서 확인하세요')
+    assert result.urls == ['https://official.example']
+    assert result.domains == ['official.example']
+
+
+def test_스킴_없는_주소의_경로를_보존하고_경로의_숫자는_전화번호가_아니다():
+    result = extract('bit.ly/Ab01000000000 클릭')
+    assert result.urls == ['https://bit.ly/Ab01000000000']
+    assert result.domains == ['bit.ly']
+    assert result.phones == []
+
+
+def test_스킴_없는_국내_도메인():
+    assert extract('notice.co.kr 참고').domains == ['notice.co.kr']
+
+
+def test_이메일_마침표_숫자는_도메인으로_뽑지_않는다():
+    result = extract('help@bank.example 로 문의. 확인했습니다.감사합니다 버전 3.14')
+    assert result.urls == []
+    assert result.domains == []
+
+
+def test_스킴_있는_주소와_같은_주소는_한_번만_뽑는다():
+    result = extract('https://notice.example 또는 notice.example')
+    assert result.urls == ['https://notice.example']
+    assert result.domains == ['notice.example']

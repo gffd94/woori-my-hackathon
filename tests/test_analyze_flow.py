@@ -69,36 +69,55 @@ def test_D03_같은_도메인이_악성과_공식에_모두_있으면_RISK와_�
     assert "악성 단서와 공식 도메인 정보가 충돌합니다" in result.reasons
 
 
+# 미확인 요소만 있으면 RISK/low(주의), 해석하지 못한 URL이 있으면 UNKNOWN이다 (SPEC 2.10)
 @pytest.mark.parametrize(
-    "message",
+    "message, expected",
     [
-        "http://official.example/notice",               # https가 아님
-        "https://official.example:8443/notice",         # 포트 지정
-        "https://official.example/notice?id=1",         # 쿼리 포함
-        "https://official.example.evil.test/notice",    # 공식 도메인을 흉내 낸 하위 도메인
-        "https://demo@official.example/notice",         # 사용자 정보
-        "https://official.example/notice 010-0000-2222",  # 공식 번호 근거 없음
-        "https://official.example/notice https://unknown.example",  # 미확인 URL
-        "https://official.example/a https://bad.example:wrong",     # 해석 실패 URL
+        ("http://official.example/notice", (Status.RISK, "low")),               # https가 아님
+        ("https://official.example:8443/notice", (Status.RISK, "low")),         # 포트 지정
+        ("https://official.example/notice?id=1", (Status.RISK, "low")),         # 쿼리 포함
+        ("https://official.example.evil.test/notice", (Status.RISK, "low")),    # 공식 도메인을 흉내 낸 하위 도메인
+        ("https://demo@official.example/notice", (Status.UNKNOWN, "unknown")),  # 사용자 정보
+        ("https://official.example/notice 010-0000-2222", (Status.RISK, "low")),  # 공식 번호 근거 없음
+        ("https://official.example/notice https://unknown.example", (Status.RISK, "low")),  # 미확인 URL
+        ("https://official.example/a https://bad.example:wrong", (Status.UNKNOWN, "unknown")),  # 해석 실패 URL
     ],
 )
-def test_D11_공식_도메인이라도_다른_요소가_불완전하면_SAFE가_아니다(message):
+def test_D11_공식_도메인이라도_다른_요소가_미확인이면_SAFE가_아니다(message, expected):
     fakes = Fakes(lookup_result=official("official.example"))
 
-    assert fakes.analyzer().analyze(message).status == Status.UNKNOWN
+    result = fakes.analyzer().analyze(message)
+
+    assert (result.status, result.risk_level) == expected
 
 
-def test_D06_URL이_없으면_공식_근거가_없어_UNKNOWN():
-    assert Fakes().analyzer().analyze("안녕하세요 가상은행입니다").status == Status.UNKNOWN
+def test_D06_URL·번호·위험신호가_없으면_SAFE():
+    result = Fakes().analyzer().analyze("안녕하세요 가상은행입니다")
+
+    assert (result.status, result.guide_type) == (Status.SAFE, "prevention")
 
 
-def test_D07_유사_카드만_있고_다른_근거가_없으면_UNKNOWN():
+def test_D07_유사_카드만으로_RISK를_확정하지_않는다():
     fakes = Fakes(judgement=UNKNOWN_LLM)
 
     result = fakes.analyzer().analyze("택배 반송 안내")
 
-    assert result.status == Status.UNKNOWN
+    assert result.status == Status.SAFE
     assert result.matched_cases == 2
+
+
+def test_D16_LLM이_놓친_가족_사칭도_규칙_안전장치로_RISK_high():
+    fakes = Fakes(judgement=UNKNOWN_LLM)
+
+    result = fakes.analyzer().analyze("엄마 나 폰 액정 깨져서 수리 맡겼어 이 번호로 문자 줘")
+
+    assert (result.status, result.risk_level) == (Status.RISK, "high")
+
+
+def test_D18_스킴_없이_적힌_공식_도메인만_있으면_SAFE():
+    fakes = Fakes(lookup_result=official("official.example"))
+
+    assert fakes.analyzer().analyze("자세한 내용은 official.example 참고").status == Status.SAFE
 
 
 def test_D02_DB에_없어도_명확한_위험_신호면_RISK():
@@ -109,10 +128,10 @@ def test_D02_DB에_없어도_명확한_위험_신호면_RISK():
 
 # --- 실패 우선순위 (F) ---
 
-def test_F01_악성_일치와_LLM_실패가_겹치면_UNKNOWN():
+def test_F01_악성_일치와_LLM_실패가_겹치면_악성_일치가_우선해_RISK():
     fakes = Fakes(lookup_result=malicious(("url", "https://malicious.example/login")), judgement=None)
 
-    assert fakes.analyzer().analyze("https://malicious.example/login").status == Status.UNKNOWN
+    assert fakes.analyzer().analyze("https://malicious.example/login").status == Status.RISK
 
 
 def test_F03_대조_DB_실패는_검색과_LLM을_실행하지_않고_UNKNOWN():
@@ -346,4 +365,4 @@ def test_LLM_대역이_잘못된_타입을_돌려주면_UNKNOWN():
 
 
 def test_LLM_대역의_SAFE_제안은_LLMJudgement_필드로_받는다():
-    assert LLMJudgement(is_high_risk=False, suggestion="SAFE").suggestion == "SAFE"
+    assert LLMJudgement(suspicious=False, suggestion="SAFE").suggestion == "SAFE"

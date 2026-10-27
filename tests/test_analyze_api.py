@@ -35,7 +35,7 @@ def _use(fakes):
     [
         (Fakes(judgement=RISK_LLM), ("RISK", "high", "damage_stage")),
         (Fakes(lookup_result=official("official.example")), ("SAFE", "low", "prevention")),
-        (Fakes(judgement=UNKNOWN_LLM), ("UNKNOWN", "unknown", "verification")),
+        (Fakes(judgement=UNKNOWN_LLM), ("RISK", "low", "verification")),  # 공식 확인 안 된 URL만 있음
     ],
 )
 def test_A11_A13_A16_정상_판정은_200과_계약_필드(client, fakes, expected):

@@ -1,4 +1,4 @@
-"""수집과 판정이 공유하는 PostgreSQL 모델.
+"""수집과 판정이 공유하는 PostgreSQL 모델. 팀 ERD의 6개 테이블을 따른다.
 
 임베딩 모델과 차원은 아직 미정이므로 ``Vector()``에 차원을 고정하지 않는다.
 실제 적재·검색 전에 수집 담당자와 모델·차원을 합의해야 한다.
@@ -7,7 +7,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -15,17 +16,18 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
+    Integer,
     REAL,
-    SmallInteger,
     Table,
     Text,
     UniqueConstraint,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -43,19 +45,6 @@ pattern_sources = Table(
     ),
 )
 
-pattern_indicators = Table(
-    "pattern_indicators",
-    Base.metadata,
-    Column("pattern_id", BigInteger, ForeignKey("patterns.id"), primary_key=True),
-    Column(
-        "indicator_id",
-        BigInteger,
-        ForeignKey("indicators.id"),
-        primary_key=True,
-        index=True,
-    ),
-)
-
 
 class Pattern(Base):
     """설명과 대표 예시를 묶어서 검색하는 수법 카드."""
@@ -64,7 +53,7 @@ class Pattern(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(Text)
-    summary: Mapped[str] = mapped_column(Text)
+    summary: Mapped[str | None] = mapped_column(Text)
     impersonation: Mapped[str | None] = mapped_column(Text)
     lure_action: Mapped[str | None] = mapped_column(Text)
     triggers: Mapped[list[str]] = mapped_column(
@@ -72,35 +61,44 @@ class Pattern(Base):
         default=list,
         server_default=text("'{}'::text[]"),
     )
-    example_messages: Mapped[list[str]] = mapped_column(
-        MutableList.as_mutable(ARRAY(Text)),
+    # 대표 문자와 유형·출처: [{"text": ..., "type": "sms"|"call", "source_post_id": ...}]
+    example_messages: Mapped[list[dict[str, Any]]] = mapped_column(
+        MutableList.as_mutable(JSONB),
         default=list,
-        server_default=text("'{}'::text[]"),
+        server_default=text("'[]'::jsonb"),
     )
-    # 단계와 산정 기준이 미정이므로 임의의 범위나 기본값을 부여하지 않는다.
-    risk_level: Mapped[int | None] = mapped_column(SmallInteger)
     embedding: Mapped[list[float] | None] = mapped_column(Vector())
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
-    first_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     sources: Mapped[list[Source]] = relationship(
         secondary=pattern_sources, back_populates="patterns"
     )
-    indicators: Mapped[list[Indicator]] = relationship(
-        secondary=pattern_indicators, back_populates="patterns"
-    )
 
 
 class Source(Base):
-    """수법을 확인한 기사 출처. 한 기사를 여러 수법이 공유할 수 있다."""
+    """수집한 게시글 원문. 한 게시글을 여러 수법이 공유할 수 있다."""
 
     __tablename__ = "sources"
+    __table_args__ = (UniqueConstraint("site", "post_id", name="uq_sources_site_post_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    title: Mapped[str] = mapped_column(Text)
-    url: Mapped[str] = mapped_column(Text, unique=True)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    site: Mapped[str] = mapped_column(Text)
+    post_id: Mapped[str] = mapped_column(Text)
+    keyword: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(Text)
+    posted_date: Mapped[date | None] = mapped_column(Date)
+    url: Mapped[str | None] = mapped_column(Text)
+    body_text: Mapped[str | None] = mapped_column(Text)
+    ocr_text: Mapped[str | None] = mapped_column(Text)
+    image_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(
+        MutableList.as_mutable(JSONB),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    collected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp()
+    )
 
     patterns: Mapped[list[Pattern]] = relationship(
         secondary=pattern_sources, back_populates="sources"
@@ -108,7 +106,7 @@ class Source(Base):
 
 
 class Indicator(Base):
-    """정규화된 악성 단서. 기사 출처와 직접 연결하지 않는다."""
+    """정규화된 악성 단서. 수법·출처와 직접 연결하지 않는다."""
 
     __tablename__ = "indicators"
     __table_args__ = (
@@ -123,26 +121,18 @@ class Indicator(Base):
     type: Mapped[str] = mapped_column(Text)
     value_normalized: Mapped[str] = mapped_column(Text)
 
-    patterns: Mapped[list[Pattern]] = relationship(
-        secondary=pattern_indicators, back_populates="indicators"
-    )
-
 
 class OfficialLink(Base):
-    """팀이 확인한 공식 주소. 문자 전체의 안전 판정을 뜻하지 않는다."""
+    """팀이 확인한 공식 도메인. 문자 전체의 안전 판정을 뜻하지 않는다."""
 
     __tablename__ = "official_links"
-    __table_args__ = (
-        UniqueConstraint("type", "value_normalized", name="uq_official_links_type_value"),
-        CheckConstraint("type IN ('domain', 'url')", name="ck_official_links_type"),
-    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    type: Mapped[str] = mapped_column(Text)
-    value_normalized: Mapped[str] = mapped_column(Text)
-    institution: Mapped[str] = mapped_column(Text)
-    verification_reference: Mapped[str] = mapped_column(Text)
-    verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    domain: Mapped[str] = mapped_column(Text, unique=True)
+    organization: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(Text)
+    verification_reference: Mapped[str | None] = mapped_column(Text)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class VerdictLog(Base):

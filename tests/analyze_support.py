@@ -20,7 +20,7 @@ from app.services.analyzer import (
     SearchOutcome,
     VerdictRecord,
 )
-from app.services.llm_judge import LLMJudgement
+from app.services.llm_judge import LLMJudgement, Signal
 
 VECTOR = [0.01] * 1536
 CARD_1 = PatternCard(id=1, name="가상 택배 조회 사칭", summary="택배 조회를 핑계로 URL 접속 유도",
@@ -28,9 +28,16 @@ CARD_1 = PatternCard(id=1, name="가상 택배 조회 사칭", summary="택배 �
 CARD_2 = PatternCard(id=2, name="가상 기관 과태료 사칭", summary="과태료 조회 유도")
 COMPLETED = SearchOutcome(status="completed", method="hybrid", coverage="complete", patterns=(CARD_1, CARD_2))
 
-SAFE_LLM = LLMJudgement(is_high_risk=False, signals=[], reasons=[], suggestion="SAFE")
-RISK_LLM = LLMJudgement(is_high_risk=True, signals=["기관 사칭", "비공식 URL"], reasons=["근거"], suggestion="RISK")
-UNKNOWN_LLM = LLMJudgement(is_high_risk=False, signals=[], reasons=[], suggestion="UNKNOWN")
+# judge 대역은 근거 문구 확인을 거친 결과를 돌려준다고 본다 (SPEC 2.10.2)
+SAFE_LLM = LLMJudgement(suspicious=False, signals=[], reasons=[], suggestion="SAFE")
+RISK_LLM = LLMJudgement(
+    suspicious=True,
+    signals=[Signal(signal="기관 사칭", evidence="가상은행"), Signal(signal="비공식 URL", evidence="https://new.example")],
+    reasons=["근거"],
+    suggestion="RISK",
+)
+# 신호·의심이 없는 응답. SAFE 여부는 서버가 URL·전화번호 확인 결과로 정한다.
+UNKNOWN_LLM = LLMJudgement(suspicious=False, signals=[], reasons=[], suggestion="UNKNOWN")
 
 
 @dataclass
