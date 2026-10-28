@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.services.analyzer import IndicatorMatch, LookupResult, PatternCard, SearchOutcome, VerdictRecord
 from app.services.extractor import ExtractedEntities
 from app.services.retriever import search_patterns
+from app.schemas.analyze import ReferenceSource
 
 SessionFactory = Callable[[], Session]
 
@@ -22,8 +23,14 @@ _INDICATOR_SQL = text(
 ).bindparams(bindparam("values", expanding=True))
 
 _OFFICIAL_SQL = text(
-    "SELECT domain FROM official_links WHERE domain IN :domains"
+    "SELECT domain, organization, verification_reference FROM official_links WHERE domain IN :domains"
 ).bindparams(bindparam("domains", expanding=True))
+
+_SOURCE_SQL = text(
+    'SELECT ps.pattern_id, s.id, s.title, s.site, s.url, s.posted_date '
+    'FROM pattern_sources ps JOIN sources s ON s.id = ps.source_id '
+    'WHERE ps.pattern_id IN :ids ORDER BY ps.pattern_id, s.id'
+).bindparams(bindparam('ids', expanding=True))
 
 _INSERT_VERDICT_SQL = text(
     "INSERT INTO verdict_logs "
@@ -41,6 +48,7 @@ def lookup_indicators(extracted: ExtractedEntities, *, session_factory: SessionF
 
     matches: list[IndicatorMatch] = []
     official: frozenset[str] = frozenset()
+    official_sources = {}
     with session_factory() as db:
         for kind, values in groups.items():
             if not values:
@@ -50,17 +58,39 @@ def lookup_indicators(extracted: ExtractedEntities, *, session_factory: SessionF
         if extracted.domains:
             rows = db.execute(_OFFICIAL_SQL, {"domains": list(extracted.domains)}).mappings().all()
             official = frozenset(row["domain"] for row in rows)
+            official_sources = {
+                row['domain']: ReferenceSource(
+                    title=row.get('organization') or '공식 도메인 확인 자료',
+                    site=row.get('organization'), url=row.get('verification_reference'))
+                for row in rows
+            }
         db.rollback()
-    return LookupResult(indicators=tuple(matches), official_domains=official)
+    return LookupResult(indicators=tuple(matches), official_domains=official, official_sources=official_sources)
 
 
 def search_cards(masked: str, vector: list[float], *, session_factory: SessionFactory) -> SearchOutcome:
     """search_patterns 결과를 analyzer의 SearchOutcome으로 옮긴다. 미완료면 카드를 넘기지 않는다."""
     with session_factory() as db:
         result = search_patterns(db, masked, vector)
+    sources = {}
+    if result.status == 'completed' and result.patterns:
+        ids = list(dict.fromkeys(p.id for p in result.patterns))
+        # 검색 함수가 트랜잭션을 관리하므로 메타데이터는 별도 세션에서 조회한다.
+        with session_factory() as db:
+            rows = db.execute(_SOURCE_SQL, {'ids': ids}).mappings().all()
+            for row in rows:
+                if row['pattern_id'] not in ids:
+                    continue
+                source = ReferenceSource(title=row['title'] or '제목 없는 참고 자료',
+                    site=row['site'], url=row['url'], posted_date=row['posted_date'])
+                group = sources.setdefault(row['pattern_id'], [])
+                if source not in group:
+                    group.append(source)
+            db.rollback()
     if result.status != "completed":
         return SearchOutcome(status=result.status, method=result.method, coverage=result.coverage)
-    cards = tuple(PatternCard(id=p.id, name=p.name, summary=p.summary) for p in result.patterns or [])
+    cards = tuple(PatternCard(id=p.id, name=p.name, summary=p.summary,
+        sources=tuple(sources.get(p.id, ()))) for p in result.patterns or [])
     return SearchOutcome(status="completed", method=result.method, coverage=result.coverage, patterns=cards)
 
 

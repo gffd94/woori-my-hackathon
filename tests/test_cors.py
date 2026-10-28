@@ -380,7 +380,7 @@ def test_analyze_post_success_has_cors(analyze_callbacks, client, caplog):
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"status", "risk_level", "reasons", "matched_cases", "guide_type", "retrieval"}
+    assert set(body) == {"status", "risk_level", "reasons", "matched_cases", "guide_type", "retrieval", "evidence"}
     assert (body["status"], body["risk_level"], body["guide_type"]) == ("SAFE", "low", "prevention")
     assert isinstance(body["reasons"], list)
     assert all(isinstance(reason, str) for reason in body["reasons"])

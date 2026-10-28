@@ -69,6 +69,7 @@ def test_판별_응답은_SPEC_필드만_내보내고_내부용_필드는_뺀다
         "matched_cases": 3,
         "guide_type": "damage_stage",
         "retrieval": COMPLETED_RETRIEVAL,
+        "evidence": [],
     }
 
 

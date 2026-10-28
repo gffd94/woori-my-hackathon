@@ -14,7 +14,7 @@ from app.routers.analyze import get_analyzer
 from tests.analyze_support import RISK_LLM, UNKNOWN_LLM, Fakes, block_real_calls, official  # noqa: F401
 
 SAFE_MESSAGE = "가상은행 공지사항 안내 https://official.example/notice"
-RESPONSE_FIELDS = {"status", "risk_level", "reasons", "matched_cases", "guide_type", "retrieval"}
+RESPONSE_FIELDS = {"status", "risk_level", "reasons", "matched_cases", "guide_type", "retrieval", "evidence"}
 
 
 @pytest.fixture

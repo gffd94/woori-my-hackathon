@@ -142,19 +142,19 @@ function TileScroller({ onOpenSafeTalk, onToast }) {
           <span className="tile-h__won" style={{ left: 24, top: 31 }}>WON</span>
           <span className="tile-h__label" style={{ top: 43 }}>WON<br />뱅킹</span>
         </button>
-        <button className="tile-h" onClick={guard(() => onToast('환전·환율 메뉴로 이동해요.'))}>
-          <Ico name="tile-fx-a.svg" w={25} h={26} className="abs" style={{ left: 17, top: 11 }} />
-          <Ico name="tile-fx-b.svg" w={13} h={15} inset="-8.33% -9.62%" className="abs" style={{ left: 29, top: 11 }} />
-          <span className="tile-h__label" style={{ top: 42 }}>환전<br />환율</span>
+        <button className="tile-h tile-h--wide" onClick={guard(onOpenSafeTalk)}>
+          <img className="tile-h__img" src={fig('tile-smishing.png')} alt="" draggable="false" />
+          <span className="tile-h__label" style={{ top: 44 }}>스미싱<br />확인</span>
         </button>
         <button className="tile-h" onClick={guard(() => onToast('퇴직연금 메뉴로 이동해요.'))}>
           <Ico name="tile-pension-a.svg" w={28} h={21} inset="-5.95% -4.46%" className="abs" style={{ left: 19, top: 16 }} />
           <Ico name="tile-pension-b.svg" w={12} h={7} inset="-17.86% -10.42%" className="abs" style={{ left: 27, top: 8 }} />
           <span className="tile-h__label" style={{ top: 43 }}>퇴직<br />연금</span>
         </button>
-        <button className="tile-h tile-h--wide" onClick={guard(onOpenSafeTalk)}>
-          <img className="tile-h__img" src={fig('tile-smishing.png')} alt="" draggable="false" />
-          <span className="tile-h__label" style={{ top: 44 }}>스미싱<br />확인</span>
+        <button className="tile-h" onClick={guard(() => onToast('환전·환율 메뉴로 이동해요.'))}>
+          <Ico name="tile-fx-a.svg" w={25} h={26} className="abs" style={{ left: 17, top: 11 }} />
+          <Ico name="tile-fx-b.svg" w={13} h={15} inset="-8.33% -9.62%" className="abs" style={{ left: 29, top: 11 }} />
+          <span className="tile-h__label" style={{ top: 42 }}>환전<br />환율</span>
         </button>
       </nav>
       <div className="tiles-bar" aria-hidden="true">
