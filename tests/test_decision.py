@@ -81,10 +81,18 @@ def test_목록에_없는_신호는_약한_신호로_센다():
 
 
 def test_U37_신호_없이_LLM이_의심만_하면_low():
-    result = _decide("가상 안내 문구입니다", [], _judgement(True, [], reasons=[]))
+    # 공식 링크가 있는 문자다. 링크·번호가 아예 없으면 U37b처럼 SAFE다 (SPEC 2.10.1).
+    message = "가상 안내 문구입니다 https://official.example"
+    result = _decide(message, OFFICIAL_DOMAIN, _judgement(True, [], reasons=[]))
 
     _assert_risk(result, "low")
     assert result.reasons
+
+
+def test_U37b_링크_번호가_없고_신호_없이_LLM이_의심만_하면_SAFE():
+    result = _decide("가상 안내 문구입니다", [], _judgement(True, [], reasons=[]))
+
+    assert result.status == Status.SAFE
 
 
 def test_U41_미확인_URL과_약한_신호가_함께_있으면_high():

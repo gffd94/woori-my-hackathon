@@ -103,11 +103,13 @@ def test_D09_악성_일치는_LLM이_SAFE를_제안해도_RISK():
     assert result.status == Status.RISK
 
 
-def test_D10_기관_사칭이_다른_근거_없이_혼자면_RISK_low():
-    # 공식 링크로 뒷받침되지 않는 경우다. 공식 링크만 있으면 D10d처럼 SAFE다.
+def test_D10_링크_번호_없이_기관_사칭_신호만_있으면_SAFE():
+    # 예: "[우리은행] 10월 급여가 입금되었습니다" 에 LLM이 발신 표기로 기관 사칭을 고른 경우.
+    # 누르거나 연락할 대상이 없다. 미확인 링크·번호가 함께 있으면 D10b처럼 RISK/high다.
     result = decide_final(replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭"]), official_support=False))
 
-    assert _level(result)[:2] == (Status.RISK, "low")
+    assert _level(result) == (Status.SAFE, "low", "prevention")
+    assert result.reasons == [REASON_SAFE]
 
 
 def test_D10d_링크가_모두_공식이고_기관_사칭_신호만_있으면_SAFE():
@@ -163,9 +165,30 @@ def test_D14_미확인_요소와_LLM_의심이_함께면_RISK_high():
 
 
 def test_D15_신호_없이_LLM_의심만_있으면_RISK_low():
+    # 공식 링크가 있는 경우다. 링크·번호가 아예 없으면 D15b처럼 SAFE다.
     result = decide_final(replace(SAFE_BASE, judgement=_llm(True, [])))
 
     assert _level(result)[:2] == (Status.RISK, "low")
+
+
+def test_D15b_링크_번호가_없고_신호_없이_LLM_의심만_있으면_SAFE():
+    result = decide_final(replace(SAFE_BASE, judgement=_llm(True, []), official_support=False))
+
+    assert result.status == Status.SAFE
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"judgement": _llm(True, ["답장·회신 유도"])},                     # 약한 신호
+        {"judgement": _llm(True, ["기관 사칭", "답장·회신 유도"])},         # 기관 사칭 + 다른 신호
+        {"rule_matches": ("가족 사칭",)},                                  # 규칙 일치
+    ],
+)
+def test_D15c_링크_번호가_없어도_다른_신호나_규칙이_있으면_SAFE가_아니다(extra):
+    base = replace(SAFE_BASE, judgement=_llm(True, ["기관 사칭"]), official_support=False)
+
+    assert decide_final(replace(base, **extra)).status == Status.RISK
 
 
 def test_D16_규칙_안전장치가_일치하면_RISK_high이고_규칙_이름을_이유에_넣는다():
