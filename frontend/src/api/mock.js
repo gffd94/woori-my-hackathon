@@ -1,9 +1,10 @@
 // 백엔드 없이 화면을 확인하기 위한 가짜 판정입니다. 실제 판정 로직이 아닙니다.
+import { withResultDetails } from './resultDetails.js';
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const KNOWN_SCAM = ['parcel-check.example'];
 const URL_RE = /(https?:\/\/\S+|www\.\S+|bit\.ly\/\S+)/i;
 
-export async function mockAnalyze({ text }) {
+async function analyzeSample({ text }) {
   // 분석 중 말풍선 3단계(1.4초씩)가 한 바퀴 보이도록 시연용 대기
   await wait(4000);
   if (/\[오류\]/.test(text)) throw new Error('mock error');
@@ -67,3 +68,19 @@ export const SAMPLES = {
   caution: '[지원금 안내]\n고객님께 특별 지원금이 지급될 예정입니다.\n자세한 내용은 담당자에게 문의해주세요.\n010-XXXX-XXXX',
   noData: '[안내]\n자세한 내용은 확인 후 연락해주세요.',
 };
+
+export async function mockAnalyze(req) {
+  const result = await analyzeSample(req);
+  const url = withResultDetails({ status: 'RISK' }, req.text).messageLinks[0];
+  return {
+    ...result,
+    isMock: true,
+    evidence: [
+      ...(url ? [{ kind: 'unverified', title: '문자에 포함된 링크', value: url,
+        detail: '시연용 분석에서 확인한 주소예요. 실제 악성 DB 대조 결과가 아니에요.', sources: [] }] : []),
+      { kind: 'pattern', title: '샘플 결과 설명', value: null,
+        detail: '현재 화면은 프론트엔드 샘플 판정이에요. 실제 참고 자료는 백엔드 연결 후 표시돼요.',
+        sources: [{ title: '시연용 문자 예시', site: '프론트엔드 샘플 데이터', url: null, posted_date: null }] },
+    ],
+  };
+}

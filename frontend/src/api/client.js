@@ -1,6 +1,7 @@
 // 설계서 API 명세(POST /analyze, POST /reports)를 호출합니다.
 // VITE_API_BASE_URL이 비어 있으면 mock.js의 가짜 응답을 씁니다.
 import { mockAnalyze, mockReport } from './mock.js';
+import { withResultDetails } from './resultDetails.js';
 
 const BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const TIMEOUT_MS = 15000;
@@ -37,9 +38,9 @@ async function post(path, body) {
  * 오류가 나면 화면에서는 일시 오류 안내로 처리합니다.
  */
 export async function analyze(req) {
-  if (!BASE) return mockAnalyze(req);
+  if (!BASE) return withResultDetails(await mockAnalyze(req), req.text);
   // 백엔드 계약(SPEC 2.11)은 message 필드만 받고, 모르는 필드는 422로 거절합니다.
-  return normalize(await post('/analyze', { message: req.text, source: req.source }));
+  return withResultDetails(normalize(await post('/analyze', { message: req.text, source: req.source })), req.text);
 }
 
 /** @param {{text: string, source: 'share' | 'paste', comment?: string}} req */

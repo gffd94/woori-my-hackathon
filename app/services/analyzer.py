@@ -19,7 +19,7 @@ from typing import Callable, Literal
 from urllib.parse import SplitResult, urlsplit
 
 from app.config import Settings
-from app.schemas.analyze import AnalyzeResponse, RetrievalInfo
+from app.schemas.analyze import AnalysisEvidence, AnalyzeResponse, ReferenceSource, RetrievalInfo
 from app.services.decision import Evidence, decide_final
 from app.services.embedding import request_embedding, validate_embedding
 from app.services.extractor import ExtractedEntities, extract_entities
@@ -47,6 +47,7 @@ class IndicatorMatch:
 class LookupResult:
     indicators: tuple[IndicatorMatch, ...] = ()
     official_domains: frozenset[str] = frozenset()
+    official_sources: dict[str, ReferenceSource] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,7 @@ class PatternCard:
     impersonation: str | None = None
     lure_action: str | None = None
     triggers: tuple[str, ...] = ()
+    sources: tuple[ReferenceSource, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -115,9 +117,11 @@ class Analyzer:
         elements: _Elements | None = None
         retrieval, patterns = NOT_RUN, ()
         judgement = None
+        lookup = None
 
         try:
-            elements = _evaluate(extracted, self._lookup(extracted))
+            lookup = self._lookup(extracted)
+            elements = _evaluate(extracted, lookup)
         except Exception as exc:
             _log_failure("lookup", exc)
 
@@ -163,6 +167,7 @@ class Analyzer:
             matched_cases=len(patterns) if complete else None,
             guide_type=decision.guide_type,
             retrieval=retrieval,
+            evidence=_response_evidence(elements, lookup, patterns, judgement, masked, decision.status.value),
         )
 
     def _retrieve(self, masked: str) -> tuple[RetrievalInfo, tuple[PatternCard, ...]]:
@@ -197,6 +202,46 @@ class Analyzer:
             _log_failure("judge", exc)
             return None
         return result if isinstance(result, LLMJudgement) else None
+
+
+def _response_evidence(elements, lookup, patterns, judgement, masked, status):
+    """실제 대조·완료 검색에 사용한 자료만 반환한다. 자료를 AI가 생성하지 않는다."""
+    evidence = []
+    if elements:
+        for value, label in elements.labels.items():
+            if label in ('scam', 'conflict'):
+                evidence.append(AnalysisEvidence(
+                    kind='indicator_match', title='등록된 악성 단서 일치', value=value,
+                    detail='악성 단서 DB와 일치했어요.' + (' 공식 정보와도 충돌해요.' if label == 'conflict' else '')
+                        + ' 이 단서의 원자료 출처는 연결되어 있지 않아요.'))
+            elif label == 'official':
+                host = urlsplit(value).hostname
+                source = lookup.official_sources.get(host) if lookup else None
+                evidence.append(AnalysisEvidence(
+                    kind='official_match', title='공식 도메인 확인', value=value,
+                    detail='등록된 공식 도메인과 일치해요. 문자 전체의 안전을 보장하지는 않아요.',
+                    sources=[source] if source else []))
+            else:
+                evidence.append(AnalysisEvidence(
+                    kind='unverified', title='공식 정보 미확인', value=value,
+                    detail='공식 정보로 확인되지 않은 요소예요. 악성 정보와 일치했다는 뜻은 아니에요.'))
+    if judgement and status == 'RISK':
+        for signal in judgement.signals:
+            quote = signal.evidence.strip()
+            if quote and quote in masked:
+                evidence.append(AnalysisEvidence(
+                    kind='signal', title=f'{mask_text(signal.signal)[:80]} 신호',
+                    value=mask_text(quote)[:300], detail='문자에서 확인한 문구를 바탕으로 분석한 신호예요.'))
+    for card in patterns:
+        sources = []
+        for source in card.sources:
+            if source not in sources:
+                sources.append(source)
+        evidence.append(AnalysisEvidence(
+            kind='pattern', title=mask_text(card.name)[:300],
+            detail='분석에 참고한 유사 수법이에요. 문자 속 링크의 악성 여부를 직접 증명하는 자료는 아니에요.',
+            sources=sources))
+    return evidence
 
 
 @dataclass(frozen=True)

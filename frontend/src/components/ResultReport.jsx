@@ -1,4 +1,5 @@
 import { fig } from '../assets.js';
+import { EvidenceDetails } from './EvidenceDetails.jsx';
 
 // 결과 리포트 (Figma: woori_result_report 19:2 · woori_result_safe 54:2 · woori_result_low_risk 54:108 · woori_result_no_data 75:2)
 // status: RISK | SAFE | CAUTION | NO_DATA  (예전 UNKNOWN은 NO_DATA로 처리)
@@ -158,6 +159,14 @@ export function ResultCard({ result }) {
           </li>
         ))}
       </ul>
+      <EvidenceDetails evidence={result.evidence} isMock={result.isMock} />
+      {result.messageLinks?.length > 0 && !result.evidence?.length && (
+        <div className="message-links">
+          <p className="message-links__title">문자에 포함된 링크</p>
+          <ul>{result.messageLinks.map((url) => <li key={url}><code>{url}</code></li>)}</ul>
+          <p className="message-links__note">문자 속 주소를 확인용으로 표시했어요. 위 판정은 문자 전체에 대한 결과이며, 각 링크의 악성 여부를 뜻하지 않아요.</p>
+        </div>
+      )}
     </section>
   );
 }
