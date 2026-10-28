@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { withResultDetails, safeSourceHref } from './resultDetails.js';
+import { withResultDetails, safeSourceHref, compactReason } from './resultDetails.js';
 
 test('실제 API의 문자열 이유에 설명을 붙이고 링크를 별도로 표시한다', () => {
   const result = withResultDetails({ status: 'RISK', reasons: ['비공식 URL 신호가 확인되었습니다'] },
@@ -42,4 +42,10 @@ test('참고 자료만 HTTPS로 열며 위험한 주소 형식은 거부한다',
     assert.equal(safeSourceHref(url), null);
   }
   assert.equal(safeSourceHref('https://reference.example/post?id=1'), 'https://reference.example/post?id=1');
+});
+test('화면용 위험 신호는 짧은 제목과 설명으로 표시한다', () => {
+  assert.deepEqual(compactReason({ title: '지인·가족 사칭 신호가 확인되었습니다' }),
+    { title: '지인·가족 사칭', detail: '지인이나 가족을 내세운 요청' });
+  assert.deepEqual(compactReason({ title: '개인 번호로 연락 유도 신호가 확인되었습니다' }),
+    { title: '개인 번호 연락 유도', detail: '문자 속 연락처로 응답 유도' });
 });

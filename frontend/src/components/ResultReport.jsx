@@ -1,5 +1,6 @@
 import { fig } from '../assets.js';
 import { EvidenceDetails } from './EvidenceDetails.jsx';
+import { compactReason } from '../api/resultDetails.js';
 
 // 결과 리포트 (Figma: woori_result_report 19:2 · woori_result_safe 54:2 · woori_result_low_risk 54:108 · woori_result_no_data 75:2)
 // status: RISK | SAFE | CAUTION | NO_DATA  (예전 UNKNOWN은 NO_DATA로 처리)
@@ -149,7 +150,7 @@ export function ResultCard({ result }) {
       </div>
       <p className="rcard__section">{c.section}</p>
       <ul className="factors">
-        {uniqueReasons(result.reasons).map((r) => (
+        {uniqueReasons(result.reasons).map(compactReason).map((r) => (
           <li key={r.title} className="factor">
             <FactorMark code={r.code} status={s} />
             <span className="factor__text">

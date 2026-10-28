@@ -58,3 +58,15 @@ test('여러 근거에 연결된 동일 출처는 한 번만 표시한다', () =
   assert.equal((html.match(/출처 : 보호나라/g) || []).length, 1);
   assert.equal(renderToStaticMarkup(React.createElement(EvidenceDetails, { evidence: [{ sources: [] }] })), '');
 });
+
+test('자료 URL이 달라도 기관마다 출처를 한 번만 표시한다', () => {
+  const html = renderToStaticMarkup(React.createElement(EvidenceDetails, { evidence: [{ sources: [
+    { site: 'boho_security_notice', title: '자료 1', url: 'https://reference.example/1' },
+    { site: 'boho_security_notice', title: '자료 2', url: 'https://reference.example/2' },
+    { site: '가상기관', title: '자료 3', url: 'https://reference.example/3' },
+  ] }] }));
+  assert.equal((html.match(/출처 : 보호나라/g) || []).length, 1);
+  assert.equal((html.match(/출처 : 가상기관/g) || []).length, 1);
+  assert.ok(html.includes('href="https://reference.example/1"'));
+  assert.ok(!html.includes('href="https://reference.example/2"'));
+});

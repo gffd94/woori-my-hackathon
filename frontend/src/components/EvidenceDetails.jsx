@@ -6,7 +6,7 @@ const SOURCE_NAMES = { boho_security_notice: '보호나라' };
 export function EvidenceDetails({ evidence = [] }) {
   const seen = new Set();
   const sources = evidence.flatMap((item) => item.sources || []).filter((source) => {
-    const key = JSON.stringify([source.site, source.url, source.title]);
+    const key = SOURCE_NAMES[source.site] || source.site || source.title || '출처 미등록';
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
