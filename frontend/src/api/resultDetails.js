@@ -33,6 +33,17 @@ export function compactReason(reason) {
   return match ? { ...reason, title: match[1], detail: match[2] } : reason;
 }
 
+export function compactReasons(reasons = []) {
+  const seen = new Set();
+  const normalize = (text = '') => text.normalize('NFKC').replace(/\s+/gu, ' ').trim();
+  return reasons.map(compactReason).filter((reason) => {
+    const key = JSON.stringify([normalize(reason.title), normalize(reason.detail)]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function messageLinks(text) {
   const matches = text.match(/https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|bit\.ly\/[^\s<>"']+/gi) || [];
   return [...new Set(matches.flatMap((raw) => {
