@@ -11,6 +11,9 @@ URL_PATTERN = re.compile(r"(?:https?://|www\.)[^\s<>\"']+", re.IGNORECASE)
 BARE_TLDS = (
     "com", "net", "org", "kr", "co", "me", "ly", "io", "xyz", "top", "shop", "site", "info", "biz",
     "cc", "link", "app", "dev", "ai", "online", "store", "club", "vip", "pw", "tk", "gl", "gd", "to",
+    # 스미싱 단축·피싱 주소에 자주 쓰이는 최상위 도메인 (예: me2.do, tsu.im, s.id, ….guru)
+    "do", "im", "id", "su", "ru", "cn", "guru", "buzz", "red", "fund", "tech", "space", "cloud", "pro",
+    "click", "work", "live", "life", "fun", "icu", "cyou", "today", "mba", "monster",
     "example", "test",
 )
 BARE_URL_PATTERN = re.compile(

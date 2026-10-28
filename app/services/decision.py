@@ -7,6 +7,8 @@ entities 기반 기존 하네스는 decide를 쓰며 decide도 decide_final로 �
 2. 필수 처리 실패·검색 제한·불완전 추출·LLM 결과 없음 → UNKNOWN
 3. RISK/high: 강한 신호 1개 이상, 신호 2개 이상, 규칙 기반 안전장치 일치,
    공식 정보로 확인되지 않은 URL·전화번호와 의심 근거(신호 또는 LLM 의심)의 결합
+   단, 미확인 URL·전화번호와 규칙 일치가 없으면 "기관 사칭" 하나, 또는 링크·전화번호가 아예 없는
+   문자의 LLM 의심 판단만으로는 경고하지 않는다 (→ SAFE)
 4. RISK/low(주의): 약한 신호 1개, 미확인 URL·전화번호만 있음, LLM 의심 판단만 있음
 5. 나머지 → SAFE. 안전을 보장한다는 뜻이 아니라 위험 신호를 찾지 못했다는 뜻이다.
 
@@ -117,15 +119,14 @@ def decide_final(evidence: Evidence) -> FinalDecision:
     if evidence.incomplete:
         return _final(Status.UNKNOWN, [REASON_INCOMPLETE])
 
-    # 링크가 모두 공식 도메인(official_links)이고 미확인 요소·규칙 일치가 없으면,
-    # 발신 표기만으로 잡히기 쉬운 기관 사칭 신호 하나는 의심 근거로 보지 않는다 (SPEC 2.10.1)
-    if (
-        evidence.official_support
-        and not evidence.unresolved
-        and not evidence.rule_matches
-        and set(signals) == {LONE_WEAK_SIGNAL}
-    ):
-        return _final(Status.SAFE, [REASON_SAFE])
+    # 미확인 URL·전화번호와 규칙 일치가 없을 때 (SPEC 2.10.1)
+    # - 발신 표기만으로 잡히기 쉬운 기관 사칭 신호 하나는 의심 근거로 보지 않는다.
+    #   링크가 모두 공식 도메인이거나, 링크·전화번호가 아예 없어 누르거나 연락할 대상이 없는 경우다.
+    # - 링크·전화번호가 아예 없으면 신호 없는 LLM 의심 판단만으로도 경고하지 않는다.
+    if not evidence.unresolved and not evidence.rule_matches:
+        no_contact = not evidence.official_support
+        if set(signals) == {LONE_WEAK_SIGNAL} or (no_contact and not signals):
+            return _final(Status.SAFE, [REASON_SAFE])
 
     # 3~4. 의심 근거가 하나라도 있으면 RISK, 근거의 세기로 high·low를 나눈다
     suspected = bool(signals) or judgement.suspicious
@@ -221,11 +222,14 @@ def decide(
     if blacklisted:
         return blacklisted
 
+    unresolved = _has_unconfirmed_element(extracted, entity_matches)
     final = decide_final(Evidence(
         processing_failed=False,
         retrieval_complete=True,
         judgement=judgement,
-        unresolved=_has_unconfirmed_element(extracted, entity_matches),
+        unresolved=unresolved,
+        # 미확인 요소가 없으면 추출된 URL은 모두 공식 정보로 확인된 것이다
+        official_support=bool(extracted.urls) and not unresolved,
         incomplete=bool(extracted.unparsed_urls),
         rule_matches=tuple(match_rules(message)),
     ))

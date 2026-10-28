@@ -1,3 +1,5 @@
+import pytest
+
 from app.services.extractor import extract, normalize_phone
 
 
@@ -90,3 +92,16 @@ def test_스킴_있는_주소와_같은_주소는_한_번만_뽑는다():
     result = extract('https://notice.example 또는 notice.example')
     assert result.urls == ['https://notice.example']
     assert result.domains == ['notice.example']
+
+
+@pytest.mark.parametrize(
+    'message,domain',
+    [
+        ('보고서 내용 abcd.wxyz.guru', 'abcd.wxyz.guru'),
+        ('주소 변경부탁드립니다 me2.do/Abc123', 'me2.do'),
+        ('주소지확인 tsu.im/xYz', 'tsu.im'),
+        ('수정하십시오 s.id/AbC1', 's.id'),
+    ],
+)
+def test_스미싱에_자주_쓰이는_최상위_도메인도_스킴_없이_추출한다(message, domain):
+    assert extract(message).domains == [domain]
